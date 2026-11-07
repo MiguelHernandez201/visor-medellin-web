@@ -31,7 +31,7 @@ await esbuild.build({
 
 // Versión: el commit (en GitHub Actions) o la hora de la construcción.
 const version = (process.env.GITHUB_SHA || '').slice(0, 12) || Date.now().toString(36);
-const sw = readFileSync(path.join(publico, 'sw.js'), 'utf8').replace('__VERSION__', version);
+const sw = readFileSync(path.join(publico, 'sw.js'), 'utf8').replace("const VERSION = '__VERSION__'", `const VERSION = '${version}'`);
 writeFileSync(path.join(salida, 'sw.js'), sw);
 writeFileSync(path.join(salida, '.nojekyll'), '');
 
