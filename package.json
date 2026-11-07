@@ -1,0 +1,17 @@
+{
+  "name": "visor-medellin-web",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Visor Medellín como PWA: cámaras del SIMM y del SIATA, lluvia, ríos, clima y alertas de Medellín en el navegador",
+  "type": "module",
+  "scripts": {
+    "dev": "node dev/servidor.mjs",
+    "build": "node scripts/construir.mjs",
+    "datos": "node scripts/datos.mjs",
+    "iconos": "node scripts/iconos.mjs"
+  },
+  "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "esbuild": "^0.28.2"
+  }
+}

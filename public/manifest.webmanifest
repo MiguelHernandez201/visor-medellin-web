@@ -1,0 +1,18 @@
+{
+  "name": "Visor Medellín",
+  "short_name": "Visor MDE",
+  "description": "Cámaras del SIMM y del SIATA, lluvia, nivel de los ríos, clima y alertas de Medellín y el Valle de Aburrá.",
+  "lang": "es-CO",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#05070d",
+  "theme_color": "#05070d",
+  "categories": ["weather", "news", "utilities"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
