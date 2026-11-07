@@ -13,6 +13,7 @@ const contexto = await esbuild.context({
   entryPoints: [path.join(raiz, 'src', 'main.js')],
   bundle: true,
   target: 'chrome87',
+  loader: { '.png': 'dataurl' }, // imágenes del CSS de Leaflet
   outdir: path.join(raiz, 'public', 'build'),
   sourcemap: true,
   logLevel: 'info',

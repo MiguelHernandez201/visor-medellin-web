@@ -1,4 +1,4 @@
-// Gráfica del nivel de un río en las últimas 3 horas (pantalla completa de las cámaras de
+// Gráfica del nivel de un río en las últimas 3 horas (visor de las cámaras de
 // río), con las franjas de riesgo del SIATA de fondo: N1 verde, N2 amarillo, N3 naranja, N4 rojo.
 
 const COLORES_FRANJA = ['rgba(61, 220, 132, 0.16)', 'rgba(255, 210, 63, 0.2)', 'rgba(255, 159, 67, 0.22)', 'rgba(255, 77, 94, 0.24)'];
@@ -11,8 +11,10 @@ const metros = (m) => `${m.toFixed(2).replace('.', ',')} m`;
  */
 export function dibujarGraficaNivel(lienzo, serie, actual) {
   const ctx = lienzo.getContext('2d');
-  const W = lienzo.width;
-  const H = lienzo.height;
+  // Se dibuja en un espacio de 640x300 que se escala al tamaño real del lienzo.
+  const W = 640;
+  const H = 300;
+  ctx.setTransform(lienzo.width / W, 0, 0, lienzo.height / H, 0, 0);
   const izq = 20;
   const der = 120; // espacio para las etiquetas de los umbrales
   const arriba = 56;

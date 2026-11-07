@@ -13,5 +13,8 @@
   "devDependencies": {
     "@resvg/resvg-js": "^2.6.2",
     "esbuild": "^0.28.2"
+  },
+  "dependencies": {
+    "leaflet": "^1.9.4"
   }
 }

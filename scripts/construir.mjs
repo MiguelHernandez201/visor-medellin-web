@@ -24,6 +24,7 @@ await esbuild.build({
   minify: true,
   sourcemap: true,
   target: ['chrome87', 'firefox90', 'safari15', 'edge90'],
+  loader: { '.png': 'dataurl' }, // imágenes del CSS de Leaflet
   outdir: path.join(salida, 'build'),
   logLevel: 'info',
 });

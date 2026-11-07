@@ -1,6 +1,6 @@
 # Visor Medellín (PWA)
 
-Versión web del [Visor Medellín para LG webOS TV](https://github.com/MiguelHernandez201/visor-medellin): las cámaras de tránsito del **SIMM** (Sistema Inteligente de Movilidad de Medellín) y las del **SIATA** (Sistema de Alerta Temprana del Valle de Aburrá), renovadas cada minuto, con la lluvia (radar y pluviómetros), el nivel de los ríos, el clima, las alertas del SIATA y un mapa de todas. Se instala como app en el computador, la tableta o el celular.
+Versión web del [Visor Medellín para LG webOS TV](https://github.com/MiguelHernandez201/visor-medellin), con una interfaz propia para la web: las cámaras de tránsito del **SIMM** (Sistema Inteligente de Movilidad de Medellín) y las del **SIATA** (Sistema de Alerta Temprana del Valle de Aburrá), renovadas cada minuto, con la lluvia (radar y pluviómetros), el nivel de los ríos, el clima, las alertas del SIATA y un mapa de todas. Se instala como app en el computador, la tableta o el celular.
 
 **App:** https://miguelhernandez201.github.io/visor-medellin-web/
 
@@ -8,31 +8,27 @@ Versión web del [Visor Medellín para LG webOS TV](https://github.com/MiguelHer
 
 ## Qué hace
 
-Lo mismo que la app del TV:
+- **Cuatro secciones**: **Tránsito** (80 cámaras del SIMM), **SIATA** (deprimidos viales, panorámicas y cámaras de cielo), **Ríos** (72 cámaras del río Medellín, quebradas y drenajes, de norte a sur) y **Mapa**. En el computador van arriba; en el celular, en una barra abajo, como en las apps.
+- **Tarjetas con la foto** de cada cámara, en una grilla que se adapta al ancho (2 columnas en el celular). Solo se renuevan las que están a la vista.
+- **Búsqueda y filtros**: por nombre o dirección, *Favoritas*, *Con lluvia* y, en Ríos, *En alerta*.
+- **Lluvia en cada cámara**: etiqueta de llovizna, ligera, moderada o fuerte, del radar del SIATA (sin falsos ecos) confirmado con los pluviómetros a menos de 2,5 km.
+- **Nivel de los ríos**: riesgo N1 a N4 y metros de agua de la estación del SIATA junto a cada cámara de río; en el visor, la gráfica de las últimas 3 horas con las franjas de riesgo.
+- **Visor**: la cámara en grande, con anterior / siguiente (botones, flechas del teclado o deslizando el dedo), favorita y **recorrido automático** (15 s por cámara, con barra de progreso).
+- **Mapa** (Leaflet: arrastrar, pellizcar, zoom): todas las cámaras con colores por fuente, anillo donde llueve y anillo que late en los ríos en alerta. Capas de lluvia: **Radar** (radar + gotas en los pluviómetros donde llueve), **Medida** (mapa de calor de los pluviómetros) y **Últimas 3 h** (animación del radar). Al tocar una cámara se abre un panel (al lado en el computador, desde abajo en el celular) con su foto, lluvia, nivel, clima y calidad del aire.
+- **Clima y alertas**: temperatura del centro en la barra superior y franja roja si el SIATA tiene una alerta vigente.
+- **Se instala como app** (botón «Instalar» en Chrome/Edge/Android, «Añadir a pantalla de inicio» en Safari) y abre rápido gracias al service worker. Favoritas, sección, filtros y vista del mapa se recuerdan en el navegador.
 
-- **Cuatro secciones**, en pestañas arriba: **SIMM** (80 cámaras de tránsito), **SIATA** (6 deprimidos viales, 11 panorámicas y 3 cámaras de cielo), **Ríos** (72 cámaras del río Medellín, quebradas y drenajes, de norte a sur) y **Mapa**.
-- **Lluvia en cada cámara:** etiqueta de llovizna, ligera, moderada o fuerte. Sale del radar del SIATA (sin falsos ecos) confirmado con los pluviómetros a menos de 2,5 km: si todos están secos, no se marca lluvia aunque el radar la muestre.
-- **Nivel de los ríos:** riesgo N1 a N4 y metros de agua de la estación del SIATA junto a cada cámara de río; en pantalla completa, la gráfica de las últimas 3 horas con las franjas de riesgo.
-- **Mapa:** todas las cámaras sobre el Valle de Aburrá. A la derecha, la foto de la elegida con su lluvia, clima y calidad del aire. Capas de lluvia (botón azul): *lluvia ahora* (radar + gotas en los pluviómetros donde llueve), *lluvia medida* (mapa de calor de los pluviómetros) y *radar de las últimas 3 horas* (animación).
-- **Clima y alertas:** temperatura del centro en la cabecera y franja roja si el SIATA tiene una alerta vigente.
-- **Favoritas**, **solo favoritas** y **recorrido automático** (cambia de cámara cada 15 s). Se guardan en el navegador.
-
-## Controles
-
-La interfaz es la del TV (un escenario de 1920x1080 que se escala a la ventana), con estos añadidos para ratón y pantalla táctil:
+## Uso
 
 | Acción | Ratón / táctil | Teclado |
 |---|---|---|
-| Cambiar de sección | Tocar la pestaña | 1 a 4, o ↑ hasta las pestañas y ← → |
-| Ver una cámara en grande | Tocar la foto (en el mapa: tocar el punto dos veces) | Flechas y Enter |
-| Anterior / siguiente en pantalla completa | Tocar el tercio izquierdo / derecho | ← → |
-| Volver | Tocar el centro de la foto o «Atrás» | Esc |
-| Página siguiente | Rueda del ratón o tocar «CH ±» | Re Pág / Av Pág |
-| Zoom del mapa | Rueda o botones + / − | Re Pág / Av Pág |
-| Favorita, solo favoritas, recorrido, capa de lluvia | Tocar el botón de color en la leyenda de abajo | R, G, Y, B |
-| Instalar como app | Botón «Instalar app» (Chrome, Edge, Android) o «Añadir a pantalla de inicio» (Safari) | — |
-
-En un celular en vertical todo se ve pequeño: mejor en horizontal o en una tableta o computador.
+| Cambiar de sección | Pestañas (arriba o abajo) | 1 a 4 |
+| Buscar | Caja de búsqueda | `/` |
+| Ver una cámara en grande | Tocar la foto | Tab hasta la foto y Enter |
+| Anterior / siguiente en el visor | Flechas a los lados o deslizar | ← → |
+| Recorrido automático | ▶ en la lista o en el visor | Espacio (en el visor) |
+| Favorita | Estrella | F (en el visor) |
+| Cerrar el visor | ✕ o el botón Atrás del celular | Esc |
 
 ## Cómo funciona en la web
 
@@ -44,7 +40,7 @@ La app del TV corre desde `file://` y puede leer cualquier sitio. En el navegado
 | Radar (última imagen) | `siata.gov.co/data/siata_app/ultima_imagen_radarDBZH.png`, que **sí** envía CORS: se lee píxel a píxel igual que en el TV. |
 | Animación del radar | Lista en `siata.gov.co/data/siata_app/animacion_radar.json` (con CORS); las imágenes no tienen CORS, así que se muestran tal cual, sin quitar falsos ecos. |
 | Niveles, pluviómetros, clima, aire, alertas, series de 3 h | La API del [geoportal del SIATA](https://geoportal.siata.gov.co) **no** envía CORS: pasan por el **relevo de datos** (abajo). |
-| Mapa | Teselas *World Dark Gray* de Esri. |
+| Mapa | [Leaflet](https://leafletjs.com) con teselas *World Dark Gray* de Esri. |
 
 ### Relevo de datos
 
@@ -78,7 +74,9 @@ Para probar con datos locales: `npm run datos`, sirve la carpeta del proyecto y 
 
 | Parte | Qué hace |
 |---|---|
-| `src/main.js` | Secciones, grilla, pantalla completa, recorrido, favoritas, teclado, ratón y táctil |
+| `src/main.js` | Interfaz: secciones, tarjetas, búsqueda y filtros, visor, recorrido, favoritas, panel del mapa |
+| `src/iconos.js` | Íconos SVG |
+| `src/app.css` | Estilos adaptables (celular, tableta, computador) |
 | `src/pwa.js` | Registro del service worker y botón «Instalar app» |
 | `src/fuente.js` | Descarga de las fotos y búsqueda de cámaras del SIMM |
 | `src/siata.js` | Cámaras del SIATA con sus coordenadas y estación de nivel |
@@ -86,8 +84,8 @@ Para probar con datos locales: `npm run datos`, sirve la carpeta del proyecto y 
 | `src/lluvia.js` | Radar: nivel de lluvia en cada punto, falsos ecos y animación |
 | `src/geoportal.js` | Lectura periódica de los datos del relevo y utilidades |
 | `src/niveles.js`, `src/pluvios.js`, `src/clima.js` | Niveles de los ríos, pluviómetros, clima, aire y alertas |
-| `src/mapa.js`, `src/grafica.js` | Mapa con sus capas y gráfica del nivel de un río |
-| `src/visor.css` | Estilos (escenario de 1920x1080) |
+| `src/mapa.js`, `src/capas.js` | Mapa (Leaflet) y lienzos de las capas de lluvia (radar recortado, mapa de calor) |
+| `src/grafica.js` | Gráfica del nivel de un río |
 | `public/` | Página, manifiesto, service worker e íconos |
 | `scripts/construir.mjs` | Construcción de `dist/` |
 | `scripts/datos.mjs` | Relevo de datos del SIATA |
