@@ -38,6 +38,7 @@ import {
   alActualizarAlertas,
 } from './clima.js';
 import { decimal } from './geoportal.js';
+import { frescuraRelevo, revisarRelevo, alActualizarRelevo } from './relevo.js';
 import { dibujarGraficaNivel } from './grafica.js';
 import { crearMapa } from './mapa.js';
 import { ICONOS } from './iconos.js';
@@ -110,7 +111,7 @@ const vistaMapa = leerPreferencia('vistaMapa', { centro: [6.2476, -75.5758], zoo
 const nombreCamara = (id) => (esSiata(id) ? camaraSiata(id).nombre : nombreDe(id));
 const detalleCamara = (id) => (esSiata(id) ? camaraSiata(id).detalle : direccionDe(id));
 const coordenadasCamara = (id) => (esSiata(id) ? camaraSiata(id).coordenadas : coordenadasDe(id));
-/** 'simm', 'siata' o 'rios': de qué fuente es la cámara (para el color en el mapa). */
+/** 'simm', 'siata' o 'rios': de qué fuente es la cámara (para la forma del punto en el mapa). */
 const fuenteDe = (id) => (esSiata(id) ? camaraSiata(id).seccion : 'simm');
 
 /**
@@ -273,7 +274,7 @@ app.innerHTML = `
           <button class="filtro" type="button" data-filtro="alerta" aria-pressed="false">${ICONOS.alerta}<span>En alerta</span></button>
           <button class="boton boton-recorrido" type="button" title="Pasa por las cámaras de la lista, 15 s cada una">${ICONOS.reproducir}<span>Recorrido</span></button>
         </div>
-        <p class="resumen" aria-live="polite"></p>
+        <p class="resumen"><span class="resumen-texto" aria-live="polite"></span><span class="aviso-datos" hidden></span></p>
       </div>
       <div class="grilla"></div>
       <p class="lista-vacia" hidden></p>
@@ -289,16 +290,24 @@ app.innerHTML = `
         <div class="mapa-leyenda">
           <span class="mapa-leyenda-titulo"></span>
           <span class="escala"><span class="nivel-lluvia-1">Llovizna</span><span class="nivel-lluvia-2">Ligera</span><span class="nivel-lluvia-3">Moderada</span><span class="nivel-lluvia-4">Fuerte</span></span>
+          <span class="leyenda-camaras">
+            <span><span class="punto punto-simm"></span>Tránsito</span>
+            <span><span class="punto punto-siata"></span>SIATA</span>
+            <span><span class="punto punto-rios"></span>Ríos</span>
+            <span><span class="punto punto-siata lluvia-2"></span>Llueve</span>
+          </span>
+          <span class="leyenda-frescura"></span>
         </div>
       </div>
       <aside class="panel" aria-live="polite">
         <div class="panel-vacio">
           <p><strong>Toca una cámara en el mapa</strong> para ver su foto, la lluvia, el nivel del río y el clima en ese punto.</p>
+          <p>Las cámaras van sin color: la forma dice de qué tipo son y el color solo aparece si llueve o un río está en alerta.</p>
           <ul class="convenciones">
             <li><span class="punto punto-simm"></span>Tránsito · SIMM</li>
             <li><span class="punto punto-siata"></span>SIATA</li>
             <li><span class="punto punto-rios"></span>Ríos y quebradas</li>
-            <li><span class="punto punto-simm lluvia-2"></span>Llueve en la cámara</li>
+            <li><span class="punto punto-simm lluvia-2"></span>Llueve en la cámara (anillo con el color de la lluvia)</li>
             <li><span class="punto punto-rios nivel-3"></span>Río en alerta</li>
             <li><span class="gota nivel-2"></span>Pluviómetro: llueve</li>
           </ul>
@@ -363,7 +372,9 @@ const vistaMapaEl = $('.vista-mapa');
 const tituloSeccionEl = $('.titulo-seccion');
 const busquedaEl = $('.busqueda input');
 const filtrosEl = $('.filtros');
-const resumenEl = $('.resumen');
+const resumenEl = $('.resumen-texto');
+const avisoDatosEl = $('.aviso-datos');
+const leyendaFrescuraEl = $('.leyenda-frescura');
 const grillaEl = $('.grilla');
 const vacioEl = $('.lista-vacia');
 const pieSimmEl = $('.pie-simm');
@@ -1013,6 +1024,8 @@ function pintarCabecera() {
 function tic() {
   if (document.hidden) return;
   const ahora = Date.now();
+  revisarRelevo();
+  pintarFrescura(ahora);
   revisarRadar();
   revisarNiveles();
   revisarMeteo();
@@ -1049,6 +1062,35 @@ function tic() {
   }
 }
 
+/**
+ * Aviso de qué tan recientes son los datos del relevo (pluviómetros, niveles, clima): en la
+ * leyenda del mapa siempre, y en las listas solo cuando están viejos.
+ */
+function pintarFrescura(ahora = Date.now()) {
+  const frescura = frescuraRelevo(ahora);
+  let leyenda = '';
+  let aviso = '';
+  let nivel = 'ok';
+  if (frescura) {
+    nivel = frescura.nivel;
+    if (frescura.minutos == null) {
+      leyenda = '⚠ No se pudieron cargar los pluviómetros ni los ríos';
+      aviso = leyenda;
+    } else if (nivel === 'ok') {
+      leyenda = `Pluviómetros y ríos: ${frescura.texto}`;
+    } else {
+      leyenda = `⚠ Pluviómetros y ríos sin actualizar: ${frescura.texto}`;
+      aviso = `⚠ Lluvia y ríos sin actualizar: ${frescura.texto}`;
+    }
+  }
+  if (leyendaFrescuraEl.textContent !== leyenda) leyendaFrescuraEl.textContent = leyenda;
+  leyendaFrescuraEl.hidden = !leyenda;
+  leyendaFrescuraEl.dataset.nivel = nivel;
+  if (avisoDatosEl.textContent !== aviso) avisoDatosEl.textContent = aviso;
+  avisoDatosEl.hidden = !aviso;
+  avisoDatosEl.dataset.nivel = nivel;
+}
+
 /** Cuando llegan datos nuevos (radar, niveles, pluviómetros…) se repintan las marcas. */
 function repintarDatos() {
   if (seccion === 'mapa') pintarMapa();
@@ -1069,6 +1111,7 @@ alActualizarMeteo(() => {
   repintarDatos();
 });
 alActualizarAlertas(pintarCabecera);
+alActualizarRelevo(() => pintarFrescura());
 alActualizarAnimacion(() => {
   if (seccion === 'mapa' && modoLluvia === 'animacion') pintarLluviaMapa();
 });
