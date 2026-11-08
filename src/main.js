@@ -37,7 +37,7 @@ import {
   revisarAlertas,
   alActualizarAlertas,
 } from './clima.js';
-import { decimal } from './geoportal.js';
+import { decimal, revisarVersion } from './geoportal.js';
 import { frescuraRelevo, revisarRelevo, alActualizarRelevo } from './relevo.js';
 import { dibujarGraficaNivel } from './grafica.js';
 import { crearMapa } from './mapa.js';
@@ -1024,6 +1024,7 @@ function pintarCabecera() {
 function tic() {
   if (document.hidden) return;
   const ahora = Date.now();
+  revisarVersion();
   revisarRelevo();
   pintarFrescura(ahora);
   revisarRadar();
