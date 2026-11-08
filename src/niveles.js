@@ -17,7 +17,7 @@
 // Para la pantalla completa, la serie de las últimas 3 horas de una estación (minuto a minuto,
 // en metros) sale de geodata/geographJson/3/nivel/<código> → series/<código>.json (el relevo
 // solo copia las de las estaciones que tienen cámara).
-import { DATOS, fuenteJson, horaDe } from './geoportal.js';
+import { urlDatos, alHaberRelevoNuevo, fuenteJson, horaDe } from './geoportal.js';
 
 /** Texto de cada riesgo; 0 = la estación no reporta. */
 export const RIESGOS = ['Sin dato', 'N1 · seguro', 'N2 · precaución', 'N3 · inundación menor', 'N4 · inundación mayor'];
@@ -100,6 +100,7 @@ export const estacion = (codigo) => {
 // ---------------------------------------------------------------------------
 const SERIE_VALIDA_MS = 2 * 60 * 1000;
 const series = new Map(); // código → { pedida, datos: { horas, metros, limites } | null }
+alHaberRelevoNuevo(() => series.forEach((entrada) => { entrada.pedida = 0; }));
 
 /**
  * Serie de las últimas 3 h de una estación: { horas: ['15:35', …], metros: [0.84, …],
@@ -112,7 +113,7 @@ export function serieNivel(codigo, alLlegar) {
   if (!guardada || ahora - guardada.pedida > SERIE_VALIDA_MS) {
     const entrada = { pedida: ahora, datos: guardada ? guardada.datos : null };
     series.set(clave, entrada);
-    fetch(`${DATOS}/series/${encodeURIComponent(clave)}.json`, { cache: 'no-store' })
+    fetch(urlDatos(`series/${encodeURIComponent(clave)}.json`), { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then(({ info }) => {
         const datos = info && info.nivelUltimosDatos;
