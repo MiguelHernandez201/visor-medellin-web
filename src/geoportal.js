@@ -11,12 +11,14 @@ export const DATOS = (new URLSearchParams(location.search).get('datos') || DATOS
 /**
  * Fuente que se pide de nuevo cada `cadaMs` (si se llama a revisar()) y se transforma con
  * `leer(json)`. `archivo` es el nombre en el relevo (p. ej. "niveles.json"). Si falla, se
- * reintenta al minuto. Devuelve { revisar, datos, alActualizar }.
+ * reintenta al minuto. Devuelve { revisar, datos, alActualizar, fallos } (fallos: pedidos
+ * fallidos seguidos, 0 tras uno que funciona).
  */
 export function fuenteJson(archivo, cadaMs, leer) {
   let datos = null;
   let pedido = 0;
   let cargando = false;
+  let fallos = 0;
   const oyentes = [];
 
   async function revisar() {
@@ -28,15 +30,17 @@ export function fuenteJson(archivo, cadaMs, leer) {
       const respuesta = await fetch(`${DATOS}/${archivo}`, { cache: 'no-store' });
       if (!respuesta.ok) throw new Error(`HTTP ${respuesta.status}`);
       datos = leer(await respuesta.json());
+      fallos = 0;
       oyentes.forEach((fn) => fn());
     } catch {
+      fallos += 1;
       pedido = ahora - cadaMs + Math.min(cadaMs, 60000); // reintento en 1 minuto
     } finally {
       cargando = false;
     }
   }
 
-  return { revisar, datos: () => datos, alActualizar: (fn) => oyentes.push(fn) };
+  return { revisar, datos: () => datos, alActualizar: (fn) => oyentes.push(fn), fallos: () => fallos };
 }
 
 /** Puntos de un GeoJSON: [{ latitud, longitud, p: properties }]. */
