@@ -30,6 +30,7 @@ export function nucleoMotor(sr) {
     ralenti: 800,
     corte: 7000,
     nivelMotor: 1,
+    pulso: 0.006,
   };
   var rpm = 0;
   var rpmObj = 0;
@@ -110,11 +111,19 @@ export function nucleoMotor(sr) {
     var largo = sal.length;
     var nRes = res.length;
     var rango = cfg.corte - cfg.ralenti || 1;
-    var fc = cfg.brillo * (0.22 + 0.78 * carga) + rpm * 0.12;
+    var fc = cfg.brillo * (0.4 + 0.6 * carga) + rpm * 0.12;
     if (fc > sr * 0.45) fc = sr * 0.45;
     var kL = 1 - Math.exp((-PI2 * fc) / sr);
     var w = (cfg.ancho * (1 - 0.4 * carga)) / (n || 1);
     if (w > 1) w = 1;
+    // Un pulso de escape dura pocos milisegundos aunque el motor gire despacio: a bajas
+    // vueltas se acorta, y así el ralentí tiene armónicos que se oyen en parlantes pequeños.
+    var realce = 1;
+    var tope = (cfg.pulso * rpm) / 120;
+    if (tope > 0.002 && w > tope) {
+      realce = Math.min(2, Math.sqrt(w / tope));
+      w = tope;
+    }
     var empuje = 1 + cfg.dureza * 5 * (0.35 + 0.65 * carga);
     var norma = 1 / Math.tanh(empuje * 0.8);
     var sobre = cargaObj < 0.04 && rpm > cfg.ralenti * 1.8;
@@ -154,7 +163,7 @@ export function nucleoMotor(sr) {
         }
         var blanco = Math.random() * 2 - 1;
         ruidoLp += (blanco - ruidoLp) * 0.35;
-        var e = s * (0.42 + 0.58 * carga) * 0.5 + ruidoLp * s * cfg.ruido * (0.3 + carga);
+        var e = s * realce * (0.5 + 0.5 * carga) * 0.5 + ruidoLp * s * realce * cfg.ruido * (0.4 + carga);
         if (pPop > 0 && Math.random() < pPop) {
           pop = 1;
           popAmp = 0.5 + Math.random() * 1.1;
@@ -178,7 +187,7 @@ export function nucleoMotor(sr) {
         lp2 += (lp1 - lp2) * kL;
         dcY = lp2 - dcX + 0.995 * dcY;
         dcX = lp2;
-        y = dcY * cfg.nivelMotor * 0.75;
+        y = dcY * cfg.nivelMotor * 0.9;
       }
       if (nSil > 0.0005) {
         faseSil += fSil / sr;
@@ -217,9 +226,18 @@ registerProcessor('${NOMBRE_PROCESADOR}',Procesador);`;
 export async function crearSonido() {
   const Contexto = window.AudioContext || window.webkitAudioContext;
   if (!Contexto) throw new Error('Este navegador no tiene Web Audio');
+  // iPhone y iPad: sin esto el interruptor de silencio también calla el audio de la página.
+  try {
+    if (navigator.audioSession) navigator.audioSession.type = 'playback';
+  } catch {
+    // navegadores sin audioSession: no hace falta
+  }
   const ctx = new Contexto({ latencyHint: 'interactive' });
+  // Se reanuda ya mismo, todavía dentro del toque: Safari no deja hacerlo después de esperar
+  // a que cargue el procesador.
+  if (ctx.state !== 'running') ctx.resume().catch(() => {});
   const salida = ctx.createGain();
-  salida.gain.value = 0.7;
+  salida.gain.value = 0.9;
   const limitador = ctx.createDynamicsCompressor();
   limitador.threshold.value = -8;
   limitador.ratio.value = 8;
@@ -253,7 +271,7 @@ export async function crearSonido() {
   return {
     configurar: (cfg) => enviar({ cfg }),
     fijar: (est) => enviar({ est }),
-    volumen: (v) => salida.gain.setTargetAtTime(v, ctx.currentTime, 0.03),
+    volumen: (v) => salida.gain.setTargetAtTime(v * 1.3, ctx.currentTime, 0.03),
     reanudar: () => (ctx.state === 'running' ? Promise.resolve() : ctx.resume()),
     suspendido: () => ctx.state !== 'running',
     pausar: () => ctx.suspend(),

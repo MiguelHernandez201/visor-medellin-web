@@ -323,7 +323,7 @@ export function crearMotor(el, { leer, guardar }) {
     }
     if (!encendido) return; // lo apagaron mientras abría
     sim.rpm = motor.electrico ? 0 : 250;
-    sim.arranque = sim.t + 0.7;
+    sim.arranque = sim.t + 0.9; // acelerón de arranque: se oye que encendió
     if (pref.modo === 'gps') iniciarGps();
     pedirBloqueo();
     pintarControles();
@@ -436,6 +436,7 @@ export function crearMotor(el, { leer, guardar }) {
       return 'La ubicación está bloqueada: actívala para este sitio en el candado de la barra de direcciones y vuelve a encender. O usa «Prueba con pedales».';
     if (gps.estado === 'sin-soporte') return 'Este navegador no da la ubicación. Usa «Prueba con pedales».';
     if (gps.estado === 'sin-senal' || performance.now() - gps.t > 6000) return 'Sin señal GPS por ahora…';
+    if (sim.v < 0.3) return 'GPS activo. Detenido solo se oye el ralentí: para oírlo sin moverte usa «Prueba con pedales» o «Acelerar en neutro».';
     return 'GPS activo: el motor sigue tu velocidad.';
   }
 
@@ -520,8 +521,8 @@ export function crearMotor(el, { leer, guardar }) {
       acelerador = 1;
     }
     if (encendido && sim.t < sim.arranque) {
-      objetivo = Math.max(objetivo, ralenti * 1.7);
-      acelerador = Math.max(acelerador, 0.45);
+      objetivo = Math.max(objetivo, motor.electrico ? 0 : corte * 0.42);
+      acelerador = Math.max(acelerador, 0.6);
     }
     if (!encendido) objetivo = 0;
     else if (!motor.electrico && objetivo <= ralenti * 1.05) {
@@ -542,10 +543,10 @@ export function crearMotor(el, { leer, guardar }) {
     let nSil = 0;
     const fraccion = limitar(sim.rpm / corte);
     if (motor.electrico) {
-      sim.vRev = enNeutro ? Math.min(45, sim.vRev + 30 * dt) : Math.max(0, sim.vRev - 40 * dt);
+      sim.vRev = enNeutro || (encendido && sim.t < sim.arranque) ? Math.min(45, sim.vRev + 30 * dt) : Math.max(0, sim.vRev - 40 * dt);
       const v = Math.max(sim.v, sim.vRev);
       fSil = (170 + v * 48) * tono;
-      nSil = encendido ? limitar((v > 0.2 ? 0.16 + 0.34 * sim.carga : 0.03) * (1 + extra)) : 0;
+      nSil = encendido ? limitar((v > 0.2 ? 0.16 + 0.34 * sim.carga : 0.06) * (1 + extra)) : 0;
     } else if (motor.turbo) {
       sim.spool += (sim.carga * fraccion - sim.spool) * Math.min(1, dt * (sim.carga * fraccion > sim.spool ? 2.5 : 5));
       fSil = (2200 + 7500 * sim.spool) * tono;
