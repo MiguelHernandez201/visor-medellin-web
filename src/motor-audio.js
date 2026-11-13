@@ -30,7 +30,7 @@ export function nucleoMotor(sr) {
     ralenti: 800,
     corte: 7000,
     nivelMotor: 1,
-    pulso: 0.006,
+    pulso: 0.0045,
     deriva: 0.004,
   };
   var rpm = 0;
@@ -118,7 +118,7 @@ export function nucleoMotor(sr) {
     var largo = sal.length;
     var nRes = res.length;
     var rango = cfg.corte - cfg.ralenti || 1;
-    var fc = cfg.brillo * (0.4 + 0.6 * carga) + rpm * 0.12;
+    var fc = cfg.brillo * (0.55 + 0.45 * carga) + rpm * 0.12;
     if (fc > sr * 0.45) fc = sr * 0.45;
     var kL = 1 - Math.exp((-PI2 * fc) / sr);
     var w = (cfg.ancho * (1 - 0.4 * carga)) / (n || 1);
@@ -209,7 +209,7 @@ export function nucleoMotor(sr) {
         y += (Math.sin(t) * 0.6 + Math.sin(2 * t) * 0.25 + Math.sin(3 * t + 1) * 0.15) * nSil;
       }
       // más nivel con tope suave: en el carro compite con el ruido de rodadura y la música
-      var z = y * gan * 1.7;
+      var z = y * gan * 2.8;
       var az = z < 0 ? -z : z;
       // limpio hasta 0,6 y redondeado de ahí en adelante (recortar más ensucia el sonido)
       if (az > 0.6) z = (z < 0 ? -1 : 1) * (0.6 + 0.38 * Math.tanh((az - 0.6) / 0.38));
@@ -238,6 +238,34 @@ registerProcessor('${NOMBRE_PROCESADOR}',Procesador);`;
 }
 
 /**
+ * Un <audio> en silencio que suena en bucle mientras el motor está encendido. Con él el
+ * navegador trata la página como un reproductor de música y no le corta el sonido al pasar
+ * a otra pestaña o a segundo plano (hasta donde cada navegador lo permite).
+ */
+function sonidoDeCompania() {
+  const muestras = 8000; // 1 s de silencio, 8 kHz, 8 bits
+  const wav = new Uint8Array(44 + muestras).fill(128);
+  const vista = new DataView(wav.buffer);
+  const texto = (posicion, t) => [...t].forEach((c, i) => vista.setUint8(posicion + i, c.charCodeAt(0)));
+  texto(0, 'RIFF');
+  vista.setUint32(4, 36 + muestras, true);
+  texto(8, 'WAVEfmt ');
+  vista.setUint32(16, 16, true);
+  vista.setUint16(20, 1, true);
+  vista.setUint16(22, 1, true);
+  vista.setUint32(24, 8000, true);
+  vista.setUint32(28, 8000, true);
+  vista.setUint16(32, 1, true);
+  vista.setUint16(34, 8, true);
+  texto(36, 'data');
+  vista.setUint32(40, muestras, true);
+  const audio = new Audio(URL.createObjectURL(new Blob([wav], { type: 'audio/wav' })));
+  audio.loop = true;
+  audio.play().catch(() => {});
+  return audio;
+}
+
+/**
  * Abre la salida de audio con el motor. Hay que llamarla desde un toque o un clic (los
  * navegadores no dejan sonar antes). Devuelve { configurar, fijar, volumen, reanudar, cerrar }.
  */
@@ -251,11 +279,12 @@ export async function crearSonido() {
     // navegadores sin audioSession: no hace falta
   }
   const ctx = new Contexto({ latencyHint: 'interactive' });
+  const compania = sonidoDeCompania();
   // Se reanuda ya mismo, todavía dentro del toque: Safari no deja hacerlo después de esperar
   // a que cargue el procesador.
   if (ctx.state !== 'running') ctx.resume().catch(() => {});
   const salida = ctx.createGain();
-  salida.gain.value = 0.9;
+  salida.gain.value = 1;
   const limitador = ctx.createDynamicsCompressor();
   limitador.threshold.value = -4;
   limitador.ratio.value = 12;
@@ -289,12 +318,19 @@ export async function crearSonido() {
   return {
     configurar: (cfg) => enviar({ cfg }),
     fijar: (est) => enviar({ est }),
-    volumen: (v) => salida.gain.setTargetAtTime(v * 1.3, ctx.currentTime, 0.03),
-    reanudar: () => (ctx.state === 'running' ? Promise.resolve() : ctx.resume()),
+    volumen: (v) => salida.gain.setTargetAtTime(v, ctx.currentTime, 0.03),
+    reanudar: () => {
+      compania.play().catch(() => {});
+      return ctx.state === 'running' ? Promise.resolve() : ctx.resume();
+    },
     suspendido: () => ctx.state !== 'running',
-    pausar: () => ctx.suspend(),
+    pausar: () => {
+      compania.pause();
+      return ctx.suspend();
+    },
     cerrar: () => {
       nodo.disconnect();
+      compania.pause();
       return ctx.close();
     },
   };

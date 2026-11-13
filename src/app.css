@@ -587,6 +587,96 @@ body.en-mapa .contenido {
   color: #05070d;
 }
 
+.boton-fotomultas {
+  position: absolute;
+  top: 66px;
+  left: 12px;
+  z-index: 800;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 4px 14px 4px 6px;
+  border: 1px solid var(--borde);
+  border-radius: 999px;
+  background: rgba(5, 7, 13, 0.88);
+  color: var(--texto-suave);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.boton-fotomultas[aria-pressed="true"] {
+  border-color: var(--rojo);
+  color: var(--texto);
+}
+
+.boton-fotomultas[aria-pressed="false"] .fotomulta {
+  opacity: 0.45;
+}
+
+/* Fotomulta: como la señal de límite de velocidad (círculo blanco con borde rojo) */
+.fotomulta {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border: 3px solid var(--rojo);
+  border-radius: 50%;
+  background: #fff;
+  color: #05070d;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.marcador .fotomulta {
+  transform: translate(-50%, -50%);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+  cursor: pointer;
+}
+
+.leyenda-fotomulta .fotomulta,
+.convenciones .fotomulta {
+  width: 20px;
+  height: 20px;
+  border-width: 2px;
+  font-size: 9px;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+.globo .leaflet-popup-content-wrapper,
+.globo .leaflet-popup-tip {
+  background: var(--superficie);
+  color: var(--texto);
+  border: 1px solid var(--borde);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.6);
+}
+
+.globo .leaflet-popup-content {
+  display: grid;
+  gap: 4px;
+  margin: 12px 14px;
+  font: inherit;
+  font-size: 0.9rem;
+}
+
+.globo .leaflet-popup-content span {
+  color: var(--texto-suave);
+}
+
+.globo .leaflet-popup-content .globo-limite {
+  color: var(--amarillo);
+  font-weight: 700;
+}
+
+.globo a.leaflet-popup-close-button {
+  color: var(--texto-suave);
+}
+
 .mapa-leyenda {
   position: absolute;
   left: 12px;
@@ -1658,6 +1748,11 @@ body.en-mapa .contenido {
   .capas-lluvia button {
     flex: 1;
     padding: 6px 10px;
+  }
+
+  .boton-fotomultas {
+    top: 60px;
+    left: 8px;
   }
 
   .mapa-leyenda {

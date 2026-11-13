@@ -3,6 +3,7 @@
 // - las cámaras, como puntos de colores (divIcon con clases de CSS);
 // - la lluvia: el radar (o un cuadro de la animación) o el mapa de calor, en un <canvas>
 //   sobre el RECORTE del valle, y una gota en cada pluviómetro donde llueve.
+// - las cámaras de fotodetección (fotomultas), como señales con el límite de velocidad.
 // Fondo: teselas "World Dark Gray" de Esri (base y, encima de la lluvia, los nombres).
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -61,7 +62,7 @@ const CapaLienzo = L.Layer.extend({
 
 /**
  * Crea el mapa en `contenedor`. Opciones: { vista: { centro, zoom }, alElegir(id), alMover(vista) }.
- * Devuelve { ponerCamaras, marcar, elegir, lluvia, invalidar }.
+ * Devuelve { ponerCamaras, marcar, elegir, lluvia, fotomultas, invalidar }.
  */
 export function crearMapa(contenedor, { vista, alElegir, alMover }) {
   const mapa = L.map(contenedor, {
@@ -83,6 +84,7 @@ export function crearMapa(contenedor, { vista, alElegir, alMover }) {
   panelNombres.style.zIndex = 380;
   panelNombres.style.pointerEvents = 'none';
   mapa.createPane('gotas').style.zIndex = 590;
+  mapa.createPane('fotomultas').style.zIndex = 595; // debajo de las cámaras (600)
 
   L.tileLayer(`${ESRI}/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}`, {
     maxNativeZoom: 16,
@@ -223,5 +225,39 @@ export function crearMapa(contenedor, { vista, alElegir, alMover }) {
     }
   }
 
-  return { ponerCamaras, marcar, elegir, lluvia, invalidar: () => mapa.invalidateSize() };
+  // -------------------------------------------------------------------------
+  // Fotomultas
+  // -------------------------------------------------------------------------
+  let capaFotomultas = null;
+
+  /**
+   * Muestra u oculta las cámaras de fotodetección. lista = [{ latitud, longitud, limite }];
+   * `html(camara)` da el contenido del globo que se abre al tocar una.
+   */
+  function fotomultas(lista, html) {
+    if (!lista) {
+      if (capaFotomultas) capaFotomultas.remove();
+      return;
+    }
+    if (!capaFotomultas) {
+      capaFotomultas = L.layerGroup();
+      for (const camara of lista) {
+        L.marker([camara.latitud, camara.longitud], {
+          pane: 'fotomultas',
+          keyboard: false,
+          title: `Fotomulta · ${camara.limite} km/h`,
+          icon: L.divIcon({
+            className: 'marcador',
+            html: `<span class="fotomulta">${camara.limite}</span>`,
+            iconSize: [0, 0],
+          }),
+        })
+          .bindPopup(() => html(camara), { className: 'globo', maxWidth: 260, offset: [0, -8] })
+          .addTo(capaFotomultas);
+      }
+    }
+    if (!mapa.hasLayer(capaFotomultas)) capaFotomultas.addTo(mapa);
+  }
+
+  return { ponerCamaras, marcar, elegir, lluvia, fotomultas, invalidar: () => mapa.invalidateSize() };
 }
