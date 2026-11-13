@@ -46,6 +46,7 @@ import { ICONOS } from './iconos.js';
 import { registrarServiceWorker, prepararInstalacion } from './pwa.js';
 import { crearMotor } from './motor.js';
 import { FOTOMULTAS } from './fotomultas.js';
+import { crearAvisos } from './avisos.js';
 
 const RECORRIDO_MS = 15 * 1000; // cuánto se ve cada cámara en el recorrido
 const PRECARGA_MS = 4 * 1000; // antes de pasar a la siguiente, se pide su imagen
@@ -264,6 +265,7 @@ app.innerHTML = `
     </div>
   </header>
   <div class="alerta-siata" role="alert" hidden>${ICONOS.alerta}<span class="alerta-texto"></span></div>
+  <div class="aviso-fotomulta" role="status" hidden><span class="fotomulta"></span><span class="aviso-fotomulta-texto"></span></div>
 
   <main class="contenido">
     <section class="vista-lista">
@@ -293,6 +295,7 @@ app.innerHTML = `
           ${MODOS_LLUVIA.map((m) => `<button type="button" data-modo="${m.id}" aria-pressed="false">${m.titulo}</button>`).join('')}
         </div>
         <button class="boton-fotomultas" type="button" aria-pressed="false" title="Cámaras de fotodetección de la Secretaría de Movilidad"><span class="fotomulta">60</span><span>Fotomultas</span></button>
+        <button class="boton-aviso" type="button" aria-pressed="false" title="Suena al acercarte a una fotomulta (usa el GPS)">${ICONOS.campana}<span>Aviso sonoro</span></button>
         <div class="mapa-leyenda">
           <span class="mapa-leyenda-titulo"></span>
           <span class="escala"><span class="nivel-lluvia-1">Llovizna</span><span class="nivel-lluvia-2">Ligera</span><span class="nivel-lluvia-3">Moderada</span><span class="nivel-lluvia-4">Fuerte</span></span>
@@ -391,6 +394,8 @@ const vacioEl = $('.lista-vacia');
 const pieSimmEl = $('.pie-simm');
 const capasEl = $('.capas-lluvia');
 const botonFotomultasEl = $('.boton-fotomultas');
+const botonAvisoEl = $('.boton-aviso');
+const avisoFotomultaEl = $('.aviso-fotomulta');
 const leyendaTituloEl = $('.mapa-leyenda-titulo');
 const panelEl = $('.panel');
 const panelVacioEl = $('.panel-vacio');
@@ -727,6 +732,38 @@ function pintarFotomultas() {
   botonFotomultasEl.setAttribute('aria-pressed', String(verFotomultas));
   $('.leyenda-fotomulta').hidden = !verFotomultas;
 }
+
+// Aviso sonoro al acercarse a una fotomulta (avisos.js). La franja se ve en todas las pestañas.
+const avisos = crearAvisos({ camaras: FOTOMULTAS, alCambiar: pintarAviso });
+
+function pintarAviso({ activo, gps, cerca }) {
+  botonAvisoEl.setAttribute('aria-pressed', String(activo));
+  let texto = '';
+  let numero = '';
+  if (cerca) {
+    const distancia = Math.max(50, Math.round(cerca.metros / 50) * 50);
+    texto = `Fotomulta a ${distancia} m · ${cerca.camara.nombre} · límite ${cerca.camara.limite} km/h${cerca.exceso ? ' · vas por encima' : ''}`;
+    numero = String(cerca.camara.limite);
+  } else if (activo && gps === 'denegado') {
+    texto = 'Aviso de fotomultas: la ubicación está bloqueada. Actívala para este sitio en el candado de la barra de direcciones.';
+  } else if (activo && gps === 'sin-soporte') {
+    texto = 'Aviso de fotomultas: este navegador no da la ubicación.';
+  }
+  avisoFotomultaEl.hidden = !texto;
+  avisoFotomultaEl.classList.toggle('exceso', Boolean(cerca && cerca.exceso));
+  avisoFotomultaEl.classList.toggle('sin-camara', !cerca);
+  avisoFotomultaEl.querySelector('.fotomulta').textContent = numero;
+  avisoFotomultaEl.querySelector('.aviso-fotomulta-texto').textContent = texto;
+  const etiqueta = !activo ? 'Aviso sonoro' : gps === 'pidiendo' ? 'Aviso: buscando GPS…' : gps === 'activo' ? 'Aviso sonoro activo' : 'Aviso: sin GPS';
+  botonAvisoEl.querySelector('span').textContent = etiqueta;
+}
+
+botonAvisoEl.addEventListener('click', () => {
+  const activar = !avisos.activo();
+  guardarPreferencia('avisoFotomultas', activar);
+  avisos.activar(activar);
+  if (activar) avisos.probar(); // suena una vez: así se sabe cómo es y a qué volumen
+});
 
 /** Avanza la animación del radar (si se está viendo). */
 function animarRadar() {
@@ -1182,6 +1219,7 @@ document.addEventListener('visibilitychange', () => {
 
 pintarSeccion();
 if (seccion === 'motor') motor.encenderSiAuto();
+if (leerPreferencia('avisoFotomultas', false)) avisos.activar(true);
 tic();
 prepararInstalacion($('.boton-instalar'));
 registrarServiceWorker();

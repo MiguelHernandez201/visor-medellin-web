@@ -20,5 +20,6 @@ export const ICONOS = {
   instalar: svg('<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>'),
   motor: svg('<path d="M4.5 18a9 9 0 1 1 15 0"/><path d="M12 14l4-5"/><circle cx="12" cy="14" r="1.4"/>'),
   encender: svg('<path d="M12 3v8"/><path d="M7 6.3a8 8 0 1 0 10 0"/>'),
+  campana: svg('<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/>'),
   recargar: svg('<path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/>'),
 };
