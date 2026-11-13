@@ -18,5 +18,7 @@ export const ICONOS = {
   siguiente: svg('<path d="M9 5l7 7-7 7"/>'),
   ampliar: svg('<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>'),
   instalar: svg('<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>'),
+  motor: svg('<path d="M4.5 18a9 9 0 1 1 15 0"/><path d="M12 14l4-5"/><circle cx="12" cy="14" r="1.4"/>'),
+  encender: svg('<path d="M12 3v8"/><path d="M7 6.3a8 8 0 1 0 10 0"/>'),
   recargar: svg('<path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/>'),
 };

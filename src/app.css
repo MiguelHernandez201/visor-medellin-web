@@ -1142,6 +1142,357 @@ body.en-mapa .contenido {
 
 /* ---------- Tableta ---------- */
 
+/* ---------- Motor ---------- */
+
+.motor {
+  display: grid;
+  grid-template-columns: minmax(280px, 440px) minmax(0, 620px);
+  justify-content: center;
+  align-items: start;
+  gap: 32px;
+  padding-top: 8px;
+}
+
+.motor-tablero {
+  position: sticky;
+  top: calc(var(--alto-barra) + 16px);
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+}
+
+.motor-reloj {
+  position: relative;
+  width: min(100%, 400px);
+  aspect-ratio: 1;
+}
+
+.motor-reloj svg {
+  width: 100%;
+  height: 100%;
+}
+
+.reloj-fondo {
+  stroke: var(--superficie-2);
+}
+
+.reloj-rojo {
+  stroke: rgba(255, 77, 94, 0.55);
+}
+
+.reloj-valor {
+  stroke: var(--acento);
+}
+
+.reloj-valor.al-corte {
+  stroke: var(--rojo);
+}
+
+.reloj-centro {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.reloj-marcha {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--acento);
+}
+
+.reloj-velocidad {
+  font-size: clamp(3.4rem, 15vw, 5.6rem);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.reloj-unidad {
+  color: var(--texto-suave);
+}
+
+.reloj-rpm {
+  margin-top: 10px;
+  font-size: 0.95rem;
+  color: var(--texto-suave);
+}
+
+.motor-encender {
+  min-height: 52px;
+  padding: 12px 28px;
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.motor-encender.encendido {
+  border-color: var(--rojo);
+  background: rgba(255, 77, 94, 0.16);
+}
+
+.motor-estado {
+  min-height: 2.8em;
+  margin: 0;
+  max-width: 38ch;
+  text-align: center;
+  font-size: 0.9rem;
+  color: var(--texto-suave);
+}
+
+.motor-controles {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.motor-titulo {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+.motor-intro {
+  margin: -8px 0 0;
+  color: var(--texto-suave);
+}
+
+.motor-lista {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 8px;
+}
+
+.motor-opcion {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie);
+  text-align: left;
+  cursor: pointer;
+}
+
+.motor-opcion span {
+  font-size: 0.8rem;
+  color: var(--texto-suave);
+}
+
+.motor-opcion:hover {
+  border-color: var(--acento);
+}
+
+.motor-opcion[aria-checked="true"] {
+  border-color: var(--acento);
+  background: var(--acento-tenue);
+}
+
+.segmento {
+  display: inline-flex;
+  padding: 3px;
+  border: 1px solid var(--borde);
+  border-radius: 999px;
+  background: var(--superficie);
+}
+
+.segmento button {
+  min-height: 36px;
+  padding: 6px 16px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--texto-suave);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.segmento button[aria-pressed="true"] {
+  background: var(--acento-tenue);
+  color: var(--acento);
+}
+
+.motor-modos {
+  justify-self: start;
+}
+
+.motor-gps,
+.motor-prueba {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+}
+
+.motor-gps .secundario,
+.motor-prueba .secundario {
+  margin: 0;
+}
+
+.motor-fila {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.motor-rev,
+.pedal {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.motor-rev.pisado,
+.motor-demo[aria-pressed="true"] {
+  border-color: var(--acento);
+  background: var(--acento-tenue);
+}
+
+.pedales {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  width: 100%;
+}
+
+.pedal {
+  position: relative;
+  height: 190px;
+  overflow: hidden;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie);
+  cursor: pointer;
+}
+
+.pedal-nivel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 0;
+  background: var(--acento-tenue);
+  border-bottom: 2px solid var(--acento);
+  opacity: 0;
+}
+
+.pedal.pisado .pedal-nivel {
+  opacity: 1;
+}
+
+.pedal-freno .pedal-nivel {
+  background: rgba(255, 77, 94, 0.16);
+  border-color: var(--rojo);
+}
+
+.pedal.pisado {
+  border-color: var(--acento);
+}
+
+.pedal-freno.pisado {
+  border-color: var(--rojo);
+}
+
+.pedal-nombre {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 12px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.deslizador {
+  display: grid;
+  grid-template-columns: minmax(96px, 150px) 1fr 4.2ch;
+  align-items: center;
+  gap: 12px;
+}
+
+.deslizador input {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  accent-color: var(--acento);
+}
+
+.deslizador output {
+  text-align: right;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--texto-suave);
+  white-space: nowrap;
+}
+
+.motor-mas {
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie);
+}
+
+.motor-mas summary {
+  padding: 12px 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.motor-mas[open] {
+  display: grid;
+  gap: 12px;
+  padding-bottom: 14px;
+}
+
+.motor-mas > :not(summary) {
+  margin: 0 14px;
+}
+
+.motor-mas ol {
+  display: grid;
+  gap: 6px;
+  padding-left: 20px;
+  color: var(--texto-suave);
+}
+
+.motor-opciones {
+  justify-content: space-between;
+}
+
+.motor-restablecer {
+  justify-self: start;
+}
+
+.motor-aviso {
+  display: flex;
+  gap: 10px;
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--texto-suave);
+}
+
+.motor-aviso svg {
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  color: var(--amarillo);
+}
+
+@media (max-width: 860px) {
+  .motor {
+    grid-template-columns: minmax(0, 560px);
+    gap: 20px;
+  }
+
+  .motor-tablero {
+    position: static;
+  }
+
+  .motor-reloj {
+    width: min(78vw, 320px);
+  }
+}
+
 @media (max-width: 1100px) {
   .herramientas {
     grid-template-columns: auto 1fr;

@@ -8,13 +8,14 @@ Versión web del [Visor Medellín para LG webOS TV](https://github.com/MiguelHer
 
 ## Qué hace
 
-- **Cuatro secciones**: **Tránsito** (80 cámaras del SIMM), **SIATA** (deprimidos viales, panorámicas y cámaras de cielo), **Ríos** (72 cámaras del río Medellín, quebradas y drenajes, de norte a sur) y **Mapa**. En el computador van arriba; en el celular, en una barra abajo, como en las apps.
+- **Cinco secciones**: **Tránsito** (80 cámaras del SIMM), **SIATA** (deprimidos viales, panorámicas y cámaras de cielo), **Ríos** (72 cámaras del río Medellín, quebradas y drenajes, de norte a sur), **Mapa** y **Motor**. En el computador van arriba; en el celular, en una barra abajo, como en las apps.
 - **Tarjetas con la foto** de cada cámara, en una grilla que se adapta al ancho (2 columnas en el celular). Solo se renuevan las que están a la vista.
 - **Búsqueda y filtros**: por nombre o dirección, *Favoritas*, *Con lluvia* y, en Ríos, *En alerta*.
 - **Lluvia en cada cámara**: etiqueta de llovizna, ligera, moderada o fuerte, del radar del SIATA (sin falsos ecos) confirmado con los pluviómetros a menos de 2,5 km.
 - **Nivel de los ríos**: riesgo N1 a N4 y metros de agua de la estación del SIATA junto a cada cámara de río; en el visor, la gráfica de las últimas 3 horas con las franjas de riesgo.
 - **Visor**: la cámara en grande, con anterior / siguiente (botones, flechas del teclado o deslizando el dedo), favorita y **recorrido automático** (15 s por cámara, con barra de progreso).
 - **Mapa** (Leaflet: arrastrar, pellizcar, zoom): todas las cámaras con colores por fuente, anillo donde llueve y anillo que late en los ríos en alerta. Capas de lluvia: **Radar** (radar + gotas en los pluviómetros donde llueve), **Medida** (mapa de calor de los pluviómetros) y **Últimas 3 h** (animación del radar). Al tocar una cámara se abre un panel (al lado en el computador, desde abajo en el celular) con su foto, lluvia, nivel, clima y calidad del aire.
+- **Motor**: sonido de motor de gasolina para un carro eléctrico, generado en vivo (sin grabaciones) y que sigue la velocidad del GPS. Seis motores (V8 americano, V8 deportivo, V12, bóxer 6, 4 cilindros turbo y eléctrico), caja automática imaginaria con cambios, limitador y petardeo. **Prueba con pedales** (acelerador y freno, o ↑ ↓ en el teclado) y **Demostración** para oírlo sin moverse; **Acelerar en neutro** con el carro detenido. Ajustes: volumen, intensidad, carácter, petardeo, tono y volumen del silbido, km/h o mph y encender al abrir. La ubicación solo se usa para medir la velocidad y no sale del navegador. El motor sigue sonando al pasar a las otras secciones.
 - **Clima y alertas**: temperatura del centro en la barra superior y franja roja si el SIATA tiene una alerta vigente.
 - **Se instala como app** (botón «Instalar» en Chrome/Edge/Android, «Añadir a pantalla de inicio» en Safari) y abre rápido gracias al service worker. Favoritas, sección, filtros y vista del mapa se recuerdan en el navegador.
 
@@ -22,7 +23,8 @@ Versión web del [Visor Medellín para LG webOS TV](https://github.com/MiguelHer
 
 | Acción | Ratón / táctil | Teclado |
 |---|---|---|
-| Cambiar de sección | Pestañas (arriba o abajo) | 1 a 4 |
+| Cambiar de sección | Pestañas (arriba o abajo) | 1 a 5 |
+| Acelerar / frenar (Motor, modo de prueba) | Pedales en pantalla | ↑ / ↓ |
 | Buscar | Caja de búsqueda | `/` |
 | Ver una cámara en grande | Tocar la foto | Tab hasta la foto y Enter |
 | Anterior / siguiente en el visor | Flechas a los lados o deslizar | ← → |
@@ -75,6 +77,8 @@ Para probar con datos locales: `npm run datos`, sirve la carpeta del proyecto y 
 | Parte | Qué hace |
 |---|---|
 | `src/main.js` | Interfaz: secciones, tarjetas, búsqueda y filtros, visor, recorrido, favoritas, panel del mapa |
+| `src/motor.js` | Sección Motor: GPS, pedales, caja de cambios imaginaria (velocidad → revoluciones y carga) e interfaz |
+| `src/motor-audio.js` | Sintetizador del motor (Web Audio, AudioWorklet): pulsos de escape por cilindro, resonancias, petardeo y silbido |
 | `src/iconos.js` | Íconos SVG |
 | `src/app.css` | Estilos adaptables (celular, tableta, computador) |
 | `src/pwa.js` | Registro del service worker y botón «Instalar app» |
