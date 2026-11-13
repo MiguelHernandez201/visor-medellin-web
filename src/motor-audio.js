@@ -31,6 +31,7 @@ export function nucleoMotor(sr) {
     corte: 7000,
     nivelMotor: 1,
     pulso: 0.006,
+    deriva: 0.004,
   };
   var rpm = 0;
   var rpmObj = 0;
@@ -51,11 +52,17 @@ export function nucleoMotor(sr) {
   var pop = 0;
   var popAmp = 0;
   var ruidoLp = 0;
+  var der = 0;
+  var derObj = 0;
+  var derCuenta = 0;
   var kR = 1 - Math.exp(-1 / (0.03 * sr));
   var kC = 1 - Math.exp(-1 / (0.025 * sr));
   var kG = 1 - Math.exp(-1 / (0.08 * sr));
   var kS = 1 - Math.exp(-1 / (0.05 * sr));
-  var decPop = Math.exp(-1 / (0.012 * sr));
+  var decPop = Math.exp(-1 / (0.02 * sr));
+  // el ruido del escape es un soplido grave, no un siseo: se filtra a unos 900 Hz
+  var kN = 1 - Math.exp((-PI2 * 900) / sr);
+  var kD = 1 - Math.exp(-1 / (0.3 * sr));
 
   function configurar(c) {
     var i;
@@ -124,11 +131,11 @@ export function nucleoMotor(sr) {
       realce = Math.min(1.5, Math.sqrt(w / tope));
       w = tope;
     }
-    var empuje = 1 + cfg.dureza * 5 * (0.35 + 0.65 * carga);
+    var empuje = 1 + cfg.dureza * 2.2 * (0.35 + 0.65 * carga);
     var norma = 1 / Math.tanh(empuje * 0.8);
     var sobre = cargaObj < 0.04 && rpm > cfg.ralenti * 1.8;
-    var pPop = sobre ? (cfg.petardeo * 16 * ((rpm - cfg.ralenti) / rango)) / sr : 0;
-    var falla = cfg.falla * (sobre ? 1 : 0.25);
+    var pPop = sobre ? (cfg.petardeo * 5 * ((rpm - cfg.ralenti) / rango)) / sr : 0;
+    var falla = sobre ? cfg.falla : 0;
     var bajo = 1 - rpm / (cfg.ralenti * 2);
     var irr = cfg.irregular * (1 + 2 * (bajo > 0 ? bajo : 0));
     var hayMotor = n > 0 && cfg.nivelMotor > 0;
@@ -142,7 +149,13 @@ export function nucleoMotor(sr) {
       nSil += (nSilObj - nSil) * kS;
       var y = 0;
       if (hayMotor) {
-        fase += rpm / (120 * sr);
+        // las vueltas nunca son perfectamente estables: una deriva lenta quita el tono de máquina
+        if (--derCuenta <= 0) {
+          derCuenta = sr * (0.15 + Math.random() * 0.3);
+          derObj = Math.random() * 2 - 1;
+        }
+        der += (derObj - der) * kD;
+        fase += (rpm * (1 + der * cfg.deriva)) / (120 * sr);
         if (fase >= 1) fase -= 1;
         var s = 0;
         for (j = 0; j < n; j++) {
@@ -162,14 +175,14 @@ export function nucleoMotor(sr) {
           }
         }
         var blanco = Math.random() * 2 - 1;
-        ruidoLp += (blanco - ruidoLp) * 0.35;
-        var e = s * realce * (0.65 + 0.35 * carga) * 0.5 + ruidoLp * s * realce * cfg.ruido * (0.4 + carga);
+        ruidoLp += (blanco - ruidoLp) * kN;
+        var e = s * realce * (0.65 + 0.35 * carga) * 0.5 + ruidoLp * s * realce * cfg.ruido * (0.3 + carga);
         if (pPop > 0 && Math.random() < pPop) {
           pop = 1;
           popAmp = 0.5 + Math.random() * 1.1;
         }
         if (pop > 0.0005) {
-          e += blanco * pop * popAmp;
+          e += ruidoLp * 3 * pop * popAmp; // golpe sordo, no chasquido
           pop *= decPop;
         }
         var mezcla = cfg.directo * e;
@@ -196,7 +209,11 @@ export function nucleoMotor(sr) {
         y += (Math.sin(t) * 0.6 + Math.sin(2 * t) * 0.25 + Math.sin(3 * t + 1) * 0.15) * nSil;
       }
       // más nivel con tope suave: en el carro compite con el ruido de rodadura y la música
-      sal[i] = Math.tanh(y * gan * 1.7);
+      var z = y * gan * 1.7;
+      var az = z < 0 ? -z : z;
+      // limpio hasta 0,6 y redondeado de ahí en adelante (recortar más ensucia el sonido)
+      if (az > 0.6) z = (z < 0 ? -1 : 1) * (0.6 + 0.38 * Math.tanh((az - 0.6) / 0.38));
+      sal[i] = z;
     }
     // por si una resonancia se desboca (no debería): se reinicia en vez de dejar un pitido
     if (!(dcY > -50 && dcY < 50)) {

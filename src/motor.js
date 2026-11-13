@@ -97,7 +97,7 @@ const POR_DEFECTO = {
   volumen: 70,
   intensidad: 50,
   caracter: 50,
-  petardeo: 30,
+  petardeo: 15,
   tono: 0,
   silbido: 0,
   unidades: 'kmh',
@@ -283,15 +283,18 @@ export function crearMotor(el, { leer, guardar }) {
     const p = pref.petardeo / 100;
     return {
       pesos: motor.pesos.map((peso) => 1 + (peso - 1) * (0.5 + c)),
-      res: motor.res,
+      // Ningún motor reparte las explosiones perfectamente parejas: cada cilindro llega al
+      // escape con un pequeño adelanto o atraso fijo. Eso da el timbre de motor y no de zumbador.
+      desfases: motor.pesos.map((_, i, lista) => (i + 0.09 * (0.6 + 0.8 * c) * Math.sin(i * 2.4 + 1)) / lista.length),
+      res: motor.res.map(([f, q, g]) => [f, q * 0.6, g]),
       ancho: motor.ancho * (1.25 - 0.5 * c),
-      ruido: motor.ruido * (0.5 + c),
+      ruido: motor.ruido * (0.3 + 0.5 * c),
       directo: 0.25 + 0.5 * c,
-      irregular: 0.03 + 0.14 * c,
-      falla: p * 0.12,
+      irregular: 0.01 + 0.04 * c,
+      falla: p * 0.02,
       petardeo: p,
       dureza: 0.15 + 0.85 * c,
-      brillo: motor.brillo * (0.35 + 1.3 * c),
+      brillo: motor.brillo * (0.3 + 0.9 * c),
       ralenti: motor.ralenti || 1,
       corte: motor.corte,
       nivelMotor: motor.electrico ? 0 : 1,
