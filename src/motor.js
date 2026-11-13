@@ -97,7 +97,7 @@ const POR_DEFECTO = {
   volumen: 70,
   intensidad: 50,
   caracter: 50,
-  petardeo: 30,
+  petardeo: 15,
   tono: 0,
   silbido: 0,
   unidades: 'kmh',
@@ -283,15 +283,18 @@ export function crearMotor(el, { leer, guardar }) {
     const p = pref.petardeo / 100;
     return {
       pesos: motor.pesos.map((peso) => 1 + (peso - 1) * (0.5 + c)),
-      res: motor.res,
+      // Ningún motor reparte las explosiones perfectamente parejas: cada cilindro llega al
+      // escape con un pequeño adelanto o atraso fijo. Eso da el timbre de motor y no de zumbador.
+      desfases: motor.pesos.map((_, i, lista) => (i + 0.09 * (0.6 + 0.8 * c) * Math.sin(i * 2.4 + 1)) / lista.length),
+      res: motor.res.map(([f, q, g]) => [f, q * 0.6, g]),
       ancho: motor.ancho * (1.25 - 0.5 * c),
-      ruido: motor.ruido * (0.5 + c),
+      ruido: motor.ruido * (0.3 + 0.5 * c),
       directo: 0.25 + 0.5 * c,
-      irregular: 0.03 + 0.14 * c,
-      falla: p * 0.12,
+      irregular: 0.01 + 0.04 * c,
+      falla: p * 0.02,
       petardeo: p,
       dureza: 0.15 + 0.85 * c,
-      brillo: motor.brillo * (0.35 + 1.3 * c),
+      brillo: motor.brillo * (0.3 + 0.9 * c),
       ralenti: motor.ralenti || 1,
       corte: motor.corte,
       nivelMotor: motor.electrico ? 0 : 1,
@@ -323,7 +326,7 @@ export function crearMotor(el, { leer, guardar }) {
     }
     if (!encendido) return; // lo apagaron mientras abría
     sim.rpm = motor.electrico ? 0 : 250;
-    sim.arranque = sim.t + 0.7;
+    sim.arranque = sim.t + 0.9; // acelerón de arranque: se oye que encendió
     if (pref.modo === 'gps') iniciarGps();
     pedirBloqueo();
     pintarControles();
@@ -436,6 +439,7 @@ export function crearMotor(el, { leer, guardar }) {
       return 'La ubicación está bloqueada: actívala para este sitio en el candado de la barra de direcciones y vuelve a encender. O usa «Prueba con pedales».';
     if (gps.estado === 'sin-soporte') return 'Este navegador no da la ubicación. Usa «Prueba con pedales».';
     if (gps.estado === 'sin-senal' || performance.now() - gps.t > 6000) return 'Sin señal GPS por ahora…';
+    if (sim.v < 0.3) return 'GPS activo. Detenido solo se oye el ralentí: para oírlo sin moverte usa «Prueba con pedales» o «Acelerar en neutro».';
     return 'GPS activo: el motor sigue tu velocidad.';
   }
 
@@ -520,8 +524,8 @@ export function crearMotor(el, { leer, guardar }) {
       acelerador = 1;
     }
     if (encendido && sim.t < sim.arranque) {
-      objetivo = Math.max(objetivo, ralenti * 1.7);
-      acelerador = Math.max(acelerador, 0.45);
+      objetivo = Math.max(objetivo, motor.electrico ? 0 : corte * 0.42);
+      acelerador = Math.max(acelerador, 0.6);
     }
     if (!encendido) objetivo = 0;
     else if (!motor.electrico && objetivo <= ralenti * 1.05) {
@@ -542,10 +546,10 @@ export function crearMotor(el, { leer, guardar }) {
     let nSil = 0;
     const fraccion = limitar(sim.rpm / corte);
     if (motor.electrico) {
-      sim.vRev = enNeutro ? Math.min(45, sim.vRev + 30 * dt) : Math.max(0, sim.vRev - 40 * dt);
+      sim.vRev = enNeutro || (encendido && sim.t < sim.arranque) ? Math.min(45, sim.vRev + 30 * dt) : Math.max(0, sim.vRev - 40 * dt);
       const v = Math.max(sim.v, sim.vRev);
       fSil = (170 + v * 48) * tono;
-      nSil = encendido ? limitar((v > 0.2 ? 0.16 + 0.34 * sim.carga : 0.03) * (1 + extra)) : 0;
+      nSil = encendido ? limitar((v > 0.2 ? 0.16 + 0.34 * sim.carga : 0.06) * (1 + extra)) : 0;
     } else if (motor.turbo) {
       sim.spool += (sim.carga * fraccion - sim.spool) * Math.min(1, dt * (sim.carga * fraccion > sim.spool ? 2.5 : 5));
       fSil = (2200 + 7500 * sim.spool) * tono;
