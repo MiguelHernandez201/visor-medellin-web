@@ -9,6 +9,7 @@
 // - Mapa: Leaflet con todas las cámaras, capas de lluvia y un panel con la elegida.
 // - Visor: la cámara en grande, con anterior/siguiente (botones, flechas o deslizando),
 //   favorita, recorrido automático y, en las de río, la gráfica del nivel.
+// - Motor: sonido de motor de gasolina que sigue la velocidad del GPS (motor.js).
 import './app.css';
 import { descargar, descubrir } from './fuente.js';
 import { CAMARAS as CAMARAS_SIMM, nombreDe, direccionDe, coordenadasDe } from './nombres.js';
@@ -43,6 +44,7 @@ import { dibujarGraficaNivel } from './grafica.js';
 import { crearMapa } from './mapa.js';
 import { ICONOS } from './iconos.js';
 import { registrarServiceWorker, prepararInstalacion } from './pwa.js';
+import { crearMotor } from './motor.js';
 
 const RECORRIDO_MS = 15 * 1000; // cuánto se ve cada cámara en el recorrido
 const PRECARGA_MS = 4 * 1000; // antes de pasar a la siguiente, se pide su imagen
@@ -55,6 +57,7 @@ const SECCIONES = [
   { id: 'siata', titulo: 'SIATA', largo: 'SIATA', icono: ICONOS.camara },
   { id: 'rios', titulo: 'Ríos', largo: 'Ríos y quebradas', icono: ICONOS.rio },
   { id: 'mapa', titulo: 'Mapa', largo: 'Mapa', icono: ICONOS.mapa },
+  { id: 'motor', titulo: 'Motor', largo: 'Motor', icono: ICONOS.motor },
 ];
 
 const MODOS_LLUVIA = [
@@ -333,6 +336,8 @@ app.innerHTML = `
         </div>
       </aside>
     </section>
+
+    <section class="vista-motor" hidden></section>
   </main>
 
   <div class="visor" role="dialog" aria-modal="true" aria-label="Cámara" tabindex="-1" hidden>
@@ -369,6 +374,7 @@ const alertaEl = $('.alerta-siata');
 const alertaTextoEl = $('.alerta-texto');
 const vistaListaEl = $('.vista-lista');
 const vistaMapaEl = $('.vista-mapa');
+const vistaMotorEl = $('.vista-motor');
 const tituloSeccionEl = $('.titulo-seccion');
 const busquedaEl = $('.busqueda input');
 const filtrosEl = $('.filtros');
@@ -392,6 +398,8 @@ const capaEl = $('.capa');
 // ---------------------------------------------------------------------------
 // Secciones
 // ---------------------------------------------------------------------------
+const motor = crearMotor(vistaMotorEl, { leer: leerPreferencia, guardar: guardarPreferencia });
+
 function cambiarSeccion(nueva) {
   if (!SECCIONES.some((s) => s.id === nueva)) return;
   seccion = nueva;
@@ -408,10 +416,18 @@ function pintarSeccion() {
     else b.removeAttribute('aria-current');
   });
   const enMapa = seccion === 'mapa';
-  vistaListaEl.hidden = enMapa;
+  const enMotor = seccion === 'motor';
+  vistaListaEl.hidden = enMapa || enMotor;
   vistaMapaEl.hidden = !enMapa;
+  vistaMotorEl.hidden = !enMotor;
   document.body.classList.toggle('en-mapa', enMapa);
-  if (enMapa) {
+  motor.mostrar(enMotor);
+  if (enMotor) {
+    // sin tarjetas a la vista no se renueva ninguna foto
+    observador.disconnect();
+    visibles.clear();
+    firmaLista = '';
+  } else if (enMapa) {
     asegurarMapa();
     requestAnimationFrame(() => mapa.invalidar());
     pintarMapa();
@@ -469,7 +485,7 @@ function htmlTarjeta(id) {
 
 /** Dibuja la lista de la sección actual. `forzar` la reconstruye aunque no haya cambiado. */
 function pintarLista(forzar = false) {
-  if (seccion === 'mapa') return;
+  if (seccion === 'mapa' || seccion === 'motor') return;
   const lista = listaFiltrada();
   const firma = `${seccion}|${lista.join(',')}`;
   if (forzar || firma !== firmaLista) {
@@ -999,12 +1015,17 @@ document.addEventListener('keydown', (evento) => {
     if (evento.key === 'Escape') evento.target.blur();
     return;
   }
-  if (evento.key === '/' && seccion !== 'mapa') {
+  if (seccion === 'motor' && motor.tecla(evento, true)) {
+    evento.preventDefault();
+  } else if (evento.key === '/' && seccion !== 'mapa' && seccion !== 'motor') {
     evento.preventDefault();
     busquedaEl.focus();
-  } else if (/^[1-4]$/.test(evento.key)) {
+  } else if (/^[1-5]$/.test(evento.key)) {
     cambiarSeccion(SECCIONES[Number(evento.key) - 1].id);
   }
+});
+document.addEventListener('keyup', (evento) => {
+  motor.tecla(evento, false);
 });
 
 // ---------------------------------------------------------------------------
@@ -1055,7 +1076,7 @@ function tic() {
       revisarFoto(elegida, ahora);
       pintarPanel();
     }
-  } else {
+  } else if (seccion !== 'motor') {
     visibles.forEach((id) => {
       revisarFoto(id, ahora);
       pintarCamara(id);
@@ -1095,7 +1116,7 @@ function pintarFrescura(ahora = Date.now()) {
 /** Cuando llegan datos nuevos (radar, niveles, pluviómetros…) se repintan las marcas. */
 function repintarDatos() {
   if (seccion === 'mapa') pintarMapa();
-  else {
+  else if (seccion !== 'motor') {
     tarjetas.forEach((_, id) => pintarCamara(id));
     if (filtros.lluvia || filtros.alerta) pintarLista();
     else pintarHerramientas(listaFiltrada());
@@ -1127,6 +1148,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 pintarSeccion();
+if (seccion === 'motor') motor.encenderSiAuto();
 tic();
 prepararInstalacion($('.boton-instalar'));
 registrarServiceWorker();
