@@ -121,7 +121,7 @@ export function nucleoMotor(sr) {
     var realce = 1;
     var tope = (cfg.pulso * rpm) / 120;
     if (tope > 0.002 && w > tope) {
-      realce = Math.min(2, Math.sqrt(w / tope));
+      realce = Math.min(1.5, Math.sqrt(w / tope));
       w = tope;
     }
     var empuje = 1 + cfg.dureza * 5 * (0.35 + 0.65 * carga);
@@ -163,7 +163,7 @@ export function nucleoMotor(sr) {
         }
         var blanco = Math.random() * 2 - 1;
         ruidoLp += (blanco - ruidoLp) * 0.35;
-        var e = s * realce * (0.5 + 0.5 * carga) * 0.5 + ruidoLp * s * realce * cfg.ruido * (0.4 + carga);
+        var e = s * realce * (0.65 + 0.35 * carga) * 0.5 + ruidoLp * s * realce * cfg.ruido * (0.4 + carga);
         if (pPop > 0 && Math.random() < pPop) {
           pop = 1;
           popAmp = 0.5 + Math.random() * 1.1;
@@ -195,7 +195,8 @@ export function nucleoMotor(sr) {
         var t = faseSil * PI2;
         y += (Math.sin(t) * 0.6 + Math.sin(2 * t) * 0.25 + Math.sin(3 * t + 1) * 0.15) * nSil;
       }
-      sal[i] = Math.tanh(y * gan);
+      // más nivel con tope suave: en el carro compite con el ruido de rodadura y la música
+      sal[i] = Math.tanh(y * gan * 1.7);
     }
     // por si una resonancia se desboca (no debería): se reinicia en vez de dejar un pitido
     if (!(dcY > -50 && dcY < 50)) {
@@ -239,8 +240,8 @@ export async function crearSonido() {
   const salida = ctx.createGain();
   salida.gain.value = 0.9;
   const limitador = ctx.createDynamicsCompressor();
-  limitador.threshold.value = -8;
-  limitador.ratio.value = 8;
+  limitador.threshold.value = -4;
+  limitador.ratio.value = 12;
   salida.connect(limitador).connect(ctx.destination);
 
   let enviar;
