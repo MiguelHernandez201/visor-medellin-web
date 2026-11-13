@@ -94,7 +94,7 @@ const MOTORES = [
 const POR_DEFECTO = {
   motor: 'v8',
   modo: 'gps',
-  volumen: 70,
+  volumen: 100,
   intensidad: 50,
   caracter: 50,
   petardeo: 15,
@@ -150,6 +150,11 @@ const ARCO = VUELTA * 0.75;
 export function crearMotor(el, { leer, guardar }) {
   const pref = { ...POR_DEFECTO, ...leer('motor', {}) };
   if (!MOTORES.some((m) => m.id === pref.motor)) pref.motor = POR_DEFECTO.motor;
+  // El volumen cambió de escala (100 % es ahora el máximo real): se parte de ahí una vez.
+  if (pref.escala !== 2) {
+    pref.escala = 2;
+    pref.volumen = 100;
+  }
   if (pref.modo !== 'gps' && pref.modo !== 'prueba') pref.modo = 'gps';
   const recordar = () => guardar('motor', pref);
   let motor = MOTORES.find((m) => m.id === pref.motor);
@@ -294,7 +299,7 @@ export function crearMotor(el, { leer, guardar }) {
       falla: p * 0.02,
       petardeo: p,
       dureza: 0.15 + 0.85 * c,
-      brillo: motor.brillo * (0.3 + 0.9 * c),
+      brillo: motor.brillo * (0.45 + 0.9 * c),
       ralenti: motor.ralenti || 1,
       corte: motor.corte,
       nivelMotor: motor.electrico ? 0 : 1,
@@ -329,6 +334,11 @@ export function crearMotor(el, { leer, guardar }) {
     sim.arranque = sim.t + 0.9; // acelerón de arranque: se oye que encendió
     if (pref.modo === 'gps') iniciarGps();
     pedirBloqueo();
+    if (navigator.mediaSession && window.MediaMetadata) {
+      navigator.mediaSession.metadata = new MediaMetadata({ title: `Motor · ${motor.nombre}`, artist: 'Visor Medellín' });
+      navigator.mediaSession.setActionHandler('pause', apagar);
+      navigator.mediaSession.setActionHandler('stop', apagar);
+    }
     pintarControles();
   }
 
@@ -761,10 +771,12 @@ export function crearMotor(el, { leer, guardar }) {
   let anterior = performance.now();
   setInterval(() => {
     const ahora = performance.now();
-    const dt = Math.min(0.1, (ahora - anterior) / 1000);
+    // En segundo plano el navegador llama este reloj solo una vez por segundo: el tiempo
+    // que pasó se recorre en pasos cortos para que el motor siga la velocidad igual.
+    let dt = Math.min(1.5, (ahora - anterior) / 1000);
     anterior = ahora;
     const quieto = !encendido && sim.rpm < 1 && sim.v === 0;
-    if (!quieto) paso(dt);
+    for (; !quieto && dt > 0.0005; dt -= 0.05) paso(Math.min(0.05, dt));
     if (visible && !document.hidden) pintarReloj();
   }, 33);
 

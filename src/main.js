@@ -45,6 +45,8 @@ import { crearMapa } from './mapa.js';
 import { ICONOS } from './iconos.js';
 import { registrarServiceWorker, prepararInstalacion } from './pwa.js';
 import { crearMotor } from './motor.js';
+import { FOTOMULTAS } from './fotomultas.js';
+import { crearAvisos } from './avisos.js';
 
 const RECORRIDO_MS = 15 * 1000; // cuánto se ve cada cámara en el recorrido
 const PRECARGA_MS = 4 * 1000; // antes de pasar a la siguiente, se pide su imagen
@@ -106,6 +108,7 @@ if (!SECCIONES.some((s) => s.id === seccion)) seccion = 'simm';
 const filtros = { favoritas: leerPreferencia('soloFavoritas', false), lluvia: false, alerta: false, texto: '' };
 let modoLluvia = leerPreferencia('modoLluvia', 'radar');
 if (!MODOS_LLUVIA.some((m) => m.id === modoLluvia)) modoLluvia = 'radar';
+let verFotomultas = leerPreferencia('fotomultas', true);
 const vistaMapa = leerPreferencia('vistaMapa', { centro: [6.2476, -75.5758], zoom: 12 });
 
 // ---------------------------------------------------------------------------
@@ -262,6 +265,7 @@ app.innerHTML = `
     </div>
   </header>
   <div class="alerta-siata" role="alert" hidden>${ICONOS.alerta}<span class="alerta-texto"></span></div>
+  <div class="aviso-fotomulta" role="status" hidden><span class="fotomulta"></span><span class="aviso-fotomulta-texto"></span></div>
 
   <main class="contenido">
     <section class="vista-lista">
@@ -290,6 +294,8 @@ app.innerHTML = `
         <div class="capas-lluvia" role="group" aria-label="Capa de lluvia">
           ${MODOS_LLUVIA.map((m) => `<button type="button" data-modo="${m.id}" aria-pressed="false">${m.titulo}</button>`).join('')}
         </div>
+        <button class="boton-fotomultas" type="button" aria-pressed="false" title="Cámaras de fotodetección de la Secretaría de Movilidad"><span class="fotomulta">60</span><span>Fotomultas</span></button>
+        <button class="boton-aviso" type="button" aria-pressed="false" title="Suena al acercarte a una fotomulta (usa el GPS)">${ICONOS.campana}<span>Aviso sonoro</span></button>
         <div class="mapa-leyenda">
           <span class="mapa-leyenda-titulo"></span>
           <span class="escala"><span class="nivel-lluvia-1">Llovizna</span><span class="nivel-lluvia-2">Ligera</span><span class="nivel-lluvia-3">Moderada</span><span class="nivel-lluvia-4">Fuerte</span></span>
@@ -298,6 +304,7 @@ app.innerHTML = `
             <span><span class="punto punto-siata"></span>SIATA</span>
             <span><span class="punto punto-rios"></span>Ríos</span>
             <span><span class="punto punto-siata lluvia-2"></span>Llueve</span>
+            <span class="leyenda-fotomulta"><span class="fotomulta">60</span>Fotomulta y su límite</span>
           </span>
           <span class="leyenda-frescura"></span>
         </div>
@@ -313,6 +320,7 @@ app.innerHTML = `
             <li><span class="punto punto-simm lluvia-2"></span>Llueve en la cámara (anillo con el color de la lluvia)</li>
             <li><span class="punto punto-rios nivel-3"></span>Río en alerta</li>
             <li><span class="gota nivel-2"></span>Pluviómetro: llueve</li>
+            <li><span class="fotomulta">60</span>Fotomulta: el número es el límite de velocidad</li>
           </ul>
         </div>
         <div class="panel-camara" hidden>
@@ -385,6 +393,9 @@ const grillaEl = $('.grilla');
 const vacioEl = $('.lista-vacia');
 const pieSimmEl = $('.pie-simm');
 const capasEl = $('.capas-lluvia');
+const botonFotomultasEl = $('.boton-fotomultas');
+const botonAvisoEl = $('.boton-aviso');
+const avisoFotomultaEl = $('.aviso-fotomulta');
 const leyendaTituloEl = $('.mapa-leyenda-titulo');
 const panelEl = $('.panel');
 const panelVacioEl = $('.panel-vacio');
@@ -660,6 +671,7 @@ function pintarLluviaMapa() {
   mapa.lluvia(capas);
   leyendaTituloEl.textContent = capas.titulo;
   capasEl.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.modo === modoLluvia)));
+  pintarFotomultas();
 }
 
 function marcarMapa() {
@@ -685,6 +697,12 @@ function pintarMapa() {
   pintarPanel();
 }
 
+botonFotomultasEl.addEventListener('click', () => {
+  verFotomultas = !verFotomultas;
+  guardarPreferencia('fotomultas', verFotomultas);
+  pintarFotomultas();
+});
+
 capasEl.addEventListener('click', (evento) => {
   const boton = evento.target.closest('[data-modo]');
   if (!boton) return;
@@ -693,6 +711,58 @@ capasEl.addEventListener('click', (evento) => {
   cuadroAnimacion = 0;
   if (modoLluvia === 'animacion') revisarAnimacion();
   pintarLluviaMapa();
+});
+
+/** Globo de una fotomulta: lugar, sentido, límite y qué detecta. */
+function htmlFotomulta(camara) {
+  const detecta = [];
+  if (camara.detecta.includes('v')) detecta.push('exceso de velocidad');
+  if (camara.detecta.includes('r')) detecta.push('semáforo en rojo');
+  if (camara.detecta.includes('p')) detecta.push('pico y placa');
+  detecta.push('SOAT y técnico-mecánica');
+  return `<strong>Fotomulta · ${escapar(camara.nombre)}</strong>
+    <span>${escapar(camara.direccion)} · de ${escapar(camara.sentido)}</span>
+    <span class="globo-limite">Límite ${camara.limite} km/h</span>
+    <span>Detecta: ${escapar(detecta.join(', '))}.</span>`;
+}
+
+function pintarFotomultas() {
+  if (!mapa) return;
+  mapa.fotomultas(verFotomultas ? FOTOMULTAS : null, htmlFotomulta);
+  botonFotomultasEl.setAttribute('aria-pressed', String(verFotomultas));
+  $('.leyenda-fotomulta').hidden = !verFotomultas;
+}
+
+// Aviso sonoro al acercarse a una fotomulta (avisos.js). La franja se ve en todas las pestañas.
+const avisos = crearAvisos({ camaras: FOTOMULTAS, alCambiar: pintarAviso });
+
+function pintarAviso({ activo, gps, cerca }) {
+  botonAvisoEl.setAttribute('aria-pressed', String(activo));
+  let texto = '';
+  let numero = '';
+  if (cerca) {
+    const distancia = Math.max(50, Math.round(cerca.metros / 50) * 50);
+    texto = `Fotomulta a ${distancia} m · ${cerca.camara.nombre} · límite ${cerca.camara.limite} km/h${cerca.exceso ? ' · vas por encima' : ''}`;
+    numero = String(cerca.camara.limite);
+  } else if (activo && gps === 'denegado') {
+    texto = 'Aviso de fotomultas: la ubicación está bloqueada. Actívala para este sitio en el candado de la barra de direcciones.';
+  } else if (activo && gps === 'sin-soporte') {
+    texto = 'Aviso de fotomultas: este navegador no da la ubicación.';
+  }
+  avisoFotomultaEl.hidden = !texto;
+  avisoFotomultaEl.classList.toggle('exceso', Boolean(cerca && cerca.exceso));
+  avisoFotomultaEl.classList.toggle('sin-camara', !cerca);
+  avisoFotomultaEl.querySelector('.fotomulta').textContent = numero;
+  avisoFotomultaEl.querySelector('.aviso-fotomulta-texto').textContent = texto;
+  const etiqueta = !activo ? 'Aviso sonoro' : gps === 'pidiendo' ? 'Aviso: buscando GPS…' : gps === 'activo' ? 'Aviso sonoro activo' : 'Aviso: sin GPS';
+  botonAvisoEl.querySelector('span').textContent = etiqueta;
+}
+
+botonAvisoEl.addEventListener('click', () => {
+  const activar = !avisos.activo();
+  guardarPreferencia('avisoFotomultas', activar);
+  avisos.activar(activar);
+  if (activar) avisos.probar(); // suena una vez: así se sabe cómo es y a qué volumen
 });
 
 /** Avanza la animación del radar (si se está viendo). */
@@ -1149,6 +1219,7 @@ document.addEventListener('visibilitychange', () => {
 
 pintarSeccion();
 if (seccion === 'motor') motor.encenderSiAuto();
+if (leerPreferencia('avisoFotomultas', false)) avisos.activar(true);
 tic();
 prepararInstalacion($('.boton-instalar'));
 registrarServiceWorker();
