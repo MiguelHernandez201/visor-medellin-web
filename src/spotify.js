@@ -129,8 +129,26 @@ async function api(ruta, { metodo = 'GET', cuerpo } = {}) {
     body: cuerpo ? JSON.stringify(cuerpo) : undefined,
   });
   if (respuesta.status === 204) return null;
-  const datos = await respuesta.json().catch(() => null);
-  if (!respuesta.ok) throw new Error((datos && datos.error && datos.error.message) || `HTTP ${respuesta.status}`);
+  const texto = await respuesta.text();
+  let datos = null;
+  try {
+    datos = texto ? JSON.parse(texto) : null;
+  } catch {
+    // Spotify a veces responde texto plano (p. ej. el 403 de una cuenta no registrada)
+  }
+  if (!respuesta.ok) {
+    const mensaje = (datos && datos.error && datos.error.message) || texto || `HTTP ${respuesta.status}`;
+    if (respuesta.status === 403) {
+      throw new Error(
+        /registered|dashboard/i.test(mensaje)
+          ? 'esta cuenta no está agregada en «User Management» de la app en el panel de desarrolladores de Spotify.'
+          : /premium/i.test(mensaje)
+            ? 'hace falta Spotify Premium.'
+            : `Spotify negó el acceso (${mensaje}). Revisa que la cuenta sea Premium y esté agregada en «User Management».`,
+      );
+    }
+    throw new Error(mensaje);
+  }
   return datos;
 }
 
@@ -243,6 +261,11 @@ export function crearSpotify(el) {
     aviso = '';
     pintar();
     try {
+      // antes del reproductor, la cuenta: así un «no registrada» o «no es Premium» se explica claro
+      const cuenta = await api('/me');
+      if (cuenta && cuenta.product && cuenta.product !== 'premium') {
+        throw new Error(`La cuenta ${cuenta.email || cuenta.display_name || ''} no es Premium: Spotify solo deja reproducir en otras apps con Premium.`);
+      }
       const Spotify = await cargarSdk();
       reproductor = new Spotify.Player({
         name: 'Visor Medellín',
@@ -284,7 +307,7 @@ export function crearSpotify(el) {
       await reproductor.connect();
       cargarListas();
     } catch (error) {
-      aviso = error.message;
+      aviso = error.message.charAt(0).toUpperCase() + error.message.slice(1);
       reproductor = null;
     }
     arrancando = false;
