@@ -25,7 +25,7 @@ const HERRAMIENTAS = [
 const RULETAS_INICIALES = [
   { nombre: '¿Dónde comemos?', opciones: ['Hamburguesa', 'Pizza', 'Sushi', 'Pollo', 'Mexicana', 'Típica'] },
   { nombre: '¿Quién conduce?', opciones: ['Yo', 'Tú'] },
-  { nombre: '¿Qué plan?', opciones: ['Cine', 'Mirador', 'Helado', 'Centro comercial', 'Casa', 'Rapidín', 'Motelear'] },
+  { nombre: '¿Qué plan?', opciones: ['Cine', 'Mirador', 'Helado', 'Un rapidín', 'Centro comercial', 'Casa', 'Motelear'] },
 ];
 const COLORES = ['#36c5ff', '#ff6fb1', '#ffd23f', '#3ddc84', '#ff8a1f', '#b388ff', '#ff4d5e', '#2ec7f0', '#7ac143', '#e040c8'];
 const ATAJOS = [5, 10, 15, 30, 45]; // minutos del temporizador
@@ -67,7 +67,7 @@ function textoCrono(ms) {
 export function crearUtilidades(el, { leer, guardar, alTemporizador = () => {} }) {
   const pref = {
     herramienta: null,
-    ruletas: RULETAS_INICIALES,
+    ruletas: null,
     ruleta: 0,
     dados: 2,
     desde: 1,
@@ -80,13 +80,33 @@ export function crearUtilidades(el, { leer, guardar, alTemporizador = () => {} }
     cronometro: { base: 0, desde: null, vueltas: [] },
     ...leer('utilidades', {}),
   };
-  if (!Array.isArray(pref.ruletas) || !pref.ruletas.length) pref.ruletas = RULETAS_INICIALES;
+  if (!Array.isArray(pref.ruletas) || !pref.ruletas.length) {
+    // copia: si se usara la lista de arriba tal cual, los cambios de abajo la modificarían
+    pref.ruletas = structuredClone(RULETAS_INICIALES);
+    pref.planConNuevas = true; // la lista inicial ya trae las opciones al día
+    pref.planUnRapidin = true;
+  }
   // Quien ya tenía guardada la ruleta «¿Qué plan?» recibe una vez las dos opciones nuevas.
   if (!pref.planConNuevas) {
     pref.planConNuevas = true;
     const plan = pref.ruletas.find((r) => r && r.nombre === '¿Qué plan?' && Array.isArray(r.opciones));
     if (plan) for (const opcion of ['Rapidín', 'Motelear']) if (!plan.opciones.includes(opcion)) plan.opciones.push(opcion);
   }
+  // «Rapidín» pasa a llamarse «Un rapidín» y se aleja de «Motelear» en la rueda.
+  if (!pref.planUnRapidin) {
+    pref.planUnRapidin = true;
+    const plan = pref.ruletas.find((r) => r && r.nombre === '¿Qué plan?' && Array.isArray(r.opciones));
+    const donde = plan ? plan.opciones.findIndex((o) => o === 'Rapidín' || o === 'Rapidín Delicioso') : -1;
+    if (donde >= 0) {
+      plan.opciones.splice(donde, 1);
+      const motel = plan.opciones.indexOf('Motelear');
+      const destino = motel < 0 ? donde : (motel + 1 + Math.floor(plan.opciones.length / 2)) % plan.opciones.length;
+      plan.opciones.splice(destino, 0, 'Un rapidín');
+    }
+  }
+  // Una versión anterior podía dejar «Un rapidín» repetido: queda solo el primero.
+  const planGuardado = pref.ruletas.find((r) => r && r.nombre === '¿Qué plan?' && Array.isArray(r.opciones));
+  if (planGuardado) planGuardado.opciones = planGuardado.opciones.filter((o, i, todas) => o !== 'Un rapidín' || todas.indexOf(o) === i);
   if (!HERRAMIENTAS.some((h) => h.id === pref.herramienta)) pref.herramienta = null;
   if (!pref.cronometro || !Array.isArray(pref.cronometro.vueltas)) pref.cronometro = { base: 0, desde: null, vueltas: [] };
   const recordar = () => guardar('utilidades', pref);
