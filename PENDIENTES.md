@@ -15,7 +15,8 @@ simulado. Conviene anotar qué falla para ajustarlo.
 - [ ] **Mapa con el rumbo arriba**: ¿gira fluido? ¿Molesta que los nombres de las calles giren?
 - [ ] **Rutas**: ¿responden OSRM y Photon desde el navegador del carro? ¿Recalcula bien?
 - [ ] **Radio La Mega**: ¿reproduce? ¿Se corta?
-- [ ] **Launchpad**: ¿responde rápido al toque o tiene retraso?
+- [ ] **DJ música**: ¿suena desde el primer toque? ¿Responde rápido o tiene retraso?
+- [ ] **Temporizador**: ¿la alarma suena justo al llegar a cero?
 
 ## 2. Cargadores: falta una fuente con las redes reales
 
