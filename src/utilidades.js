@@ -1,11 +1,12 @@
 // Sección «Utilidades»: herramientas rápidas para el carro, pensadas para tocar con el dedo.
-//   Moneda · Ruleta · Dados y número al azar · Temporizador · Cronómetro · Reloj · DJ música · Radio · Spotify · Bromas
+//   Moneda · Ruleta · Dados y número al azar · Temporizador · Cronómetro · Reloj · DJ música · Radio · Spotify · Fútbol · Bromas
 // Todo corre en el navegador. El temporizador, el cronómetro y la radio siguen andando al
 // cambiar de pestaña; la música del DJ se detiene al salir de él.
 import { crearPads, PADS, RITMOS } from './pads.js';
 import { crearEfectos } from './efectos.js';
 import { crearBromas } from './bromas.js';
 import { crearSpotify } from './spotify.js';
+import { crearFutbol } from './futbol.js';
 
 const RADIO = {
   nombre: 'La Mega',
@@ -23,6 +24,7 @@ const HERRAMIENTAS = [
   { id: 'launchpad', nombre: 'DJ música', detalle: 'Pads y ritmos para tocar', emoji: '🎛️' },
   { id: 'radio', nombre: 'Radio', detalle: RADIO.nombre, emoji: '📻' },
   { id: 'spotify', nombre: 'Spotify', detalle: 'Tu música, junto con la voz de la app', emoji: '🎧' },
+  { id: 'futbol', nombre: 'Fútbol', detalle: 'Liga colombiana: en vivo y tabla', emoji: '⚽' },
   { id: 'bromas', nombre: 'Bromas', detalle: '¿Quién fue?, mentiras y choque', emoji: '😈' },
 ];
 
@@ -245,6 +247,8 @@ export function crearUtilidades(el, { leer, guardar, alTemporizador = () => {}, 
 
         <section class="util-herramienta" data-herramienta="spotify"><div class="spotify-caja"></div></section>
 
+        <section class="util-herramienta" data-herramienta="futbol"><div class="futbol-caja"></div></section>
+
         <section class="util-herramienta" data-herramienta="bromas"><div class="bromas"></div></section>
       </div>
     </div>`;
@@ -346,6 +350,9 @@ export function crearUtilidades(el, { leer, guardar, alTemporizador = () => {}, 
   // Spotify (spotify.js): la música suena dentro de la app
   const spotify = crearSpotify($('.spotify-caja'));
 
+  // Fútbol (futbol.js): Liga colombiana
+  const futbol = crearFutbol($('.futbol-caja'), { leer, guardar });
+
   // Bromas (bromas.js): usan el mismo contexto de audio
   const bromas = crearBromas($('.bromas'), { sonar: (fn) => cuandoSuene(() => fn(ctx)), velocidad: velocidadGps });
 
@@ -370,6 +377,7 @@ export function crearUtilidades(el, { leer, guardar, alTemporizador = () => {}, 
     if (actual) $('.util-nombre').textContent = actual.nombre;
     if (!actual || actual.id !== 'bromas') bromas.detener();
     if (actual && actual.id === 'spotify') spotify.mostrar(true);
+    futbol.mostrar(visible && Boolean(actual) && actual.id === 'futbol');
     cuidarDj();
     pintarEstados();
     if (!actual) return;
@@ -1094,6 +1102,7 @@ export function crearUtilidades(el, { leer, guardar, alTemporizador = () => {}, 
       else {
         cuidarDj(); // al salir de la pestaña, la música del DJ se detiene
         bromas.detener();
+        futbol.mostrar(false);
       }
       cuidarPantalla();
     },

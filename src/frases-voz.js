@@ -15,6 +15,30 @@ export const DISTANCIAS_VOZ = [1000, 500, 300, 200, 100];
 const DISTANCIAS = { 1000: 'En un kilómetro,', 500: 'En quinientos metros,', 300: 'En trescientos metros,', 200: 'En doscientos metros,', 100: 'En cien metros,' };
 const ORDINALES = ['primera', 'segunda', 'tercera', 'cuarta', 'quinta'];
 
+/** Equipos de la Liga colombiana (id de ESPN → nombre como lo dice el narrador). */
+export const EQUIPOS_VOZ = {
+  9761: 'Alianza',
+  8109: 'América de Cali',
+  6137: 'Atlético Bucaramanga',
+  4815: 'Junior',
+  5264: 'Atlético Nacional',
+  5480: 'Boyacá Chicó',
+  6101: 'Cúcuta Deportivo',
+  5489: 'Deportes Tolima',
+  2672: 'Deportivo Cali',
+  5485: 'Deportivo Pasto',
+  5486: 'Deportivo Pereira',
+  4928: 'Fortaleza',
+  2690: 'Independiente Medellín',
+  5488: 'Independiente Santa Fe',
+  7445: 'Internacional de Bogotá',
+  10309: 'Jaguares de Córdoba',
+  7915: 'Llaneros',
+  5484: 'Millonarios',
+  2919: 'Once Caldas',
+  9762: 'Águilas Doradas',
+};
+
 export const FRASES = {
   // Aviso de fotomultas
   'fotomulta-prueba': 'Cámara de fotomulta más adelante.',
@@ -64,11 +88,16 @@ export const FRASES = {
   'mentira-mentira': '¡Mentira! ¡Está mintiendo!',
   'choque-alerta': '¡Alerta! Colisión detectada. Llamando a emergencias.',
   'choque-broma': '¡Es broma!',
+
+  // Fútbol: aviso de gol en los partidos de tu equipo
+  ...Object.fromEntries(Object.entries(EQUIPOS_VOZ).map(([id, nombre]) => [`gol-${id}`, `¡Goooool! ¡Gol de ${nombre}!`])),
+  'futbol-final': 'Terminó el partido.',
 };
 
 /** Grupos que se bajan juntos (cada parte de la app pide solo los suyos). */
 export const GRUPOS = {
   fotomultas: Object.keys(FRASES).filter((id) => /^(fotomulta|exceso)-/.test(id)),
-  ruta: Object.keys(FRASES).filter((id) => !/^(fotomulta|exceso|quien|mentira|choque)-/.test(id)),
+  ruta: Object.keys(FRASES).filter((id) => !/^(fotomulta|exceso|quien|mentira|choque|gol|futbol)-/.test(id)),
   bromas: Object.keys(FRASES).filter((id) => /^(quien|mentira|choque)-/.test(id)),
+  futbol: Object.keys(FRASES).filter((id) => /^(gol|futbol)-/.test(id)),
 };
