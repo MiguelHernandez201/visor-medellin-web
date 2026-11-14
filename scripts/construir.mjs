@@ -33,6 +33,10 @@ await esbuild.build({
 const version = (process.env.GITHUB_SHA || '').slice(0, 12) || Date.now().toString(36);
 const sw = readFileSync(path.join(publico, 'sw.js'), 'utf8').replace("const VERSION = '__VERSION__'", `const VERSION = '${version}'`);
 writeFileSync(path.join(salida, 'sw.js'), sw);
+// El HTML pide el JS y el CSS con la versión: así nunca se mezcla una página nueva con un
+// paquete viejo guardado en la caché del navegador.
+const pagina = path.join(salida, 'index.html');
+writeFileSync(pagina, readFileSync(pagina, 'utf8').replace(/(build\/main\.(?:js|css))"/g, `$1?v=${version}"`));
 writeFileSync(path.join(salida, '.nojekyll'), '');
 
 if (!existsSync(path.join(salida, 'icons', 'icon-192.png'))) {

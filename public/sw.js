@@ -5,6 +5,9 @@
 //   a la red: son datos en vivo y no tiene sentido guardarlos.
 // npm run build reemplaza __VERSION__ por una marca única: al publicar una versión nueva,
 // el navegador ve el service worker cambiado, guarda la cáscara nueva y borra la vieja.
+// GitHub Pages manda los archivos con «Cache-Control: max-age=600»: por eso la cáscara se
+// pide siempre saltándose la caché HTTP del navegador (si no, durante 10 minutos llegaría
+// la versión anterior aunque ya se hubiera publicado otra).
 const VERSION = '__VERSION__';
 const CACHE = `visor-medellin-${VERSION}`;
 const CASCARA = [
@@ -22,7 +25,7 @@ self.addEventListener('install', (evento) => {
   evento.waitUntil(
     caches
       .open(CACHE)
-      .then((cache) => cache.addAll(CASCARA))
+      .then((cache) => cache.addAll(CASCARA.map((ruta) => new Request(ruta, { cache: 'reload' }))))
       .then(() => self.skipWaiting()),
   );
 });
@@ -43,8 +46,11 @@ self.addEventListener('fetch', (evento) => {
   if (url.origin !== self.location.origin) return; // datos en vivo: directo a la red
 
   // Cáscara: primero la red (para tener siempre la última versión) y, si no hay, la copia.
+  // «no-cache» pregunta al servidor si cambió (si no, responde 304 sin descargar nada). Una
+  // navegación no se puede copiar con opciones, así que se pide por su dirección.
+  const deLaRed = request.mode === 'navigate' ? fetch(request.url, { cache: 'no-cache', credentials: 'same-origin' }) : fetch(request, { cache: 'no-cache' });
   evento.respondWith(
-    fetch(request)
+    deLaRed
       .then((respuesta) => {
         if (respuesta.ok) {
           const copia = respuesta.clone();

@@ -840,6 +840,37 @@ body.en-mapa .contenido {
   font-weight: 700;
 }
 
+/* Aviso de versión nueva de la app (pwa.js) */
+.aviso-version {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--alto-nav-movil) + 16px + env(safe-area-inset-bottom));
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  padding: 8px 8px 8px 16px;
+  border: 1px solid var(--acento);
+  border-radius: 999px;
+  background: var(--superficie);
+  color: var(--texto);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.6);
+  transform: translateX(-50%);
+}
+
+.aviso-version span {
+  min-width: 0;
+  font-weight: 600;
+}
+
+.aviso-version .aviso-version-cerrar {
+  min-width: 40px;
+  justify-content: center;
+  padding: 8px;
+}
+
 .aviso-fotomulta .fotomulta {
   width: 40px;
   height: 40px;
