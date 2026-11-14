@@ -51,6 +51,9 @@ import { CARGADORES, REDES, nombreRed, revisarCargadores, alActualizarCargadores
 import { MOTELES, revisarMoteles, alActualizarMoteles } from './moteles.js';
 import { dibujoConector, NOMBRES_CONECTOR } from './conectores.js';
 import { crearAvisos } from './avisos.js';
+import { voz } from './voz.js';
+import { completarInicioSesion } from './spotify.js';
+import { DISTANCIAS_VOZ } from './frases-voz.js';
 import { crearUbicacion } from './ubicacion.js';
 import {
   buscarLugares,
@@ -501,6 +504,11 @@ const utilidades = crearUtilidades(vistaUtilidadesEl, {
     temporizadorChipEl.hidden = !texto;
     temporizadorChipEl.classList.toggle('terminado', Boolean(terminado));
     if (texto && temporizadorChipEl.textContent !== `⏳ ${texto}`) temporizadorChipEl.textContent = `⏳ ${texto}`;
+  },
+  // el simulador de choque de las bromas solo corre con el carro detenido (null = no se sabe)
+  velocidadGps: () => {
+    const posicion = ubicacion.posicion();
+    return posicion ? posicion.velocidad : null;
   },
 });
 temporizadorChipEl.addEventListener('click', () => {
@@ -1146,6 +1154,8 @@ let resultados = null; // lugares encontrados (null = no se ha buscado)
 let esperandoOrigen = false; // hay destino pero aún no se sabe dónde está el carro
 let llegada = false;
 let fueraDeRuta = 0; // lecturas seguidas lejos del trazado
+let vozRuta = leerPreferencia('vozRuta', true); // la voz dice las maniobras
+const anuncio = { paso: null, hechos: new Set() }; // lo que ya se dijo de la maniobra que viene
 let ultimoCalculo = 0;
 let busquedaLugares = null;
 let calculoRuta = null;
@@ -1273,6 +1283,7 @@ async function buscarDestino(texto) {
 }
 
 function fijarDestino(lugar) {
+  if (vozRuta) voz.cargar('ruta'); // las frases de la guía se bajan al elegir el primer destino
   destino = lugar;
   ruta = null;
   resultados = null;
@@ -1346,6 +1357,7 @@ async function calcularRuta(recalculo = false) {
     camaraRuta = recalculo && sigue >= 0 ? sigue : 0;
     nueva.camaras.slice(camaraRuta, camaraRuta + 2).forEach((c) => revisarFoto(c.lugar.id));
     ruta = nueva;
+    anuncio.paso = null;
     rutaEstado = desdeCentro ? 'Sin GPS: la ruta sale del centro del mapa.' : '';
     mapa.ruta(ruta.puntos, [destino.latitud, destino.longitud]);
     if (!recalculo) {
@@ -1372,14 +1384,50 @@ function guiar(posicion) {
   ruta.recorrido = avance.recorrido;
   if (avance.restante < 35 && avance.fuera < 60) {
     llegada = true;
+    if (vozRuta) voz.decir(['llegada']);
     pintarGuia(null);
     return;
   }
   fueraDeRuta = avance.fuera > 70 && posicion.precision < 60 ? fueraDeRuta + 1 : 0;
-  if (fueraDeRuta >= 3 && Date.now() - ultimoCalculo > 8000 && !calculoRuta) calcularRuta(true);
+  if (fueraDeRuta >= 3 && Date.now() - ultimoCalculo > 8000 && !calculoRuta) {
+    if (vozRuta) voz.decir(['recalculando']);
+    calcularRuta(true);
+  } else if (fueraDeRuta < 3) anunciarManiobra(avance, posicion.velocidad);
   // con el panel de la ruta abierto, también se actualiza lo que falta para cada punto
   if (rutaAbierta && seccion === 'mapa') pintarRuta();
   else pintarGuia(avance);
+}
+
+/**
+ * Voz de la guía: «En doscientos metros, gira a la derecha» antes de cada maniobra (a 1 km en
+ * vía rápida, a 500 m a velocidad media y a 200 m siempre) y la maniobra sola al llegar a ella
+ * (unos 4 s antes). Cada aviso suena una vez por maniobra.
+ */
+function anunciarManiobra(avance, velocidad = 0) {
+  const paso = avance.paso;
+  if (!vozRuta || !paso || !paso.voz) return;
+  if (anuncio.paso !== paso) {
+    anuncio.paso = paso;
+    anuncio.hechos = new Set();
+  }
+  const metros = avance.metrosAlPaso;
+  const cerca = Math.max(40, velocidad * 4);
+  if (metros <= cerca) {
+    // «llegarás a tu destino» no se repite al llegar: ahí suena «Llegaste a tu destino»
+    if (!anuncio.hechos.has('ahora') && paso.voz !== 'llegas') voz.decir([paso.voz]);
+    anuncio.hechos.add('ahora');
+    return;
+  }
+  // la llegada se anuncia una sola vez antes (a 200 m); las maniobras, también desde más lejos
+  const umbrales = paso.voz === 'llegas' ? [200] : [velocidad > 17 ? 1000 : 0, velocidad > 11 ? 500 : 0, 200].filter(Boolean);
+  const cruzado = umbrales.find((u) => metros <= u && !anuncio.hechos.has(u));
+  if (!cruzado) return;
+  // ya no hacen falta los más lejanos ni uno que caería a menos de 100 m de este aviso
+  umbrales.forEach((u) => (u >= cruzado || u >= metros - 100) && anuncio.hechos.add(u));
+  if (metros - cerca < 60) return; // tan cerca que enseguida viene el aviso de «ahora»
+  // la distancia con frase más cercana (en un empate, la menor: mejor quedarse corto)
+  const distancia = DISTANCIAS_VOZ.reduce((a, b) => (Math.abs(b - metros) <= Math.abs(a - metros) ? b : a));
+  voz.decir([`en-${distancia}`, paso.voz]);
 }
 
 let guiaPintada = '';
@@ -1583,6 +1631,7 @@ function pintarRuta() {
           <button class="boton boton-principal" type="button" data-ruta="seguir">${ICONOS.ubicar}<span>Seguir mi carro</span></button>
           <button class="boton" type="button" data-ruta="ver">Ver toda</button>
           <button class="boton" type="button" data-ruta="quitar">Quitar ruta</button>
+          <button class="boton boton-voz" type="button" data-ruta="voz" aria-pressed="${vozRuta}">${ICONOS.campana}<span>Voz en los giros: ${vozRuta ? 'sí' : 'no'}</span></button>
         </div>
         <div class="ruta-acciones">${guardar}</div>
       </div>`;
@@ -1703,6 +1752,12 @@ panelRutaEl.addEventListener('click', (evento) => {
     guardados[clave] = { ...destino, nombre };
     guardados.recientes = guardados.recientes.filter((r) => !mismoLugar(r, destino));
     guardarPreferencia('destinos', guardados);
+    pintarRuta();
+  } else if (accion.dataset.ruta === 'voz') {
+    vozRuta = !vozRuta;
+    guardarPreferencia('vozRuta', vozRuta);
+    if (vozRuta) voz.cargar('ruta');
+    else voz.callar();
     pintarRuta();
   } else if (accion.dataset.ruta === 'quitar') quitarRuta();
   else if (accion.dataset.ruta === 'reintentar') calcularRuta();
@@ -2212,3 +2267,9 @@ if (leerPreferencia('avisoFotomultas', false)) avisos.activar(true);
 tic();
 prepararInstalacion($('.boton-instalar'));
 registrarServiceWorker();
+// de vuelta del inicio de sesión de Spotify: se abre su herramienta
+completarInicioSesion().then((volvio) => {
+  if (!volvio) return;
+  utilidades.abrir('spotify');
+  cambiarSeccion('utilidades');
+});

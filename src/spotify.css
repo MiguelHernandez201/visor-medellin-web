@@ -1,0 +1,167 @@
+/* Herramienta «Spotify» de las utilidades (spotify.js) */
+.spotify {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  width: min(100%, 560px);
+}
+
+.spotify-sesion,
+.spotify-reproductor {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  width: 100%;
+}
+
+.spotify-sesion[hidden],
+.spotify-reproductor[hidden] {
+  display: none;
+}
+
+.spotify-sesion p {
+  max-width: 440px;
+  margin: 0;
+}
+
+.spotify-ahora {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  text-align: left;
+}
+
+.spotify-portada {
+  flex: none;
+  width: 96px;
+  height: 96px;
+  border-radius: 10px;
+  object-fit: cover;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+}
+
+.spotify-cancion {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.spotify-cancion strong {
+  font-size: 1.2rem;
+  overflow-wrap: anywhere;
+}
+
+.spotify-cancion span {
+  color: var(--texto-suave);
+}
+
+.spotify-barra {
+  width: 100%;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--superficie-2);
+}
+
+.spotify-barra span {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: #1ed760;
+  transition: width 1s linear;
+}
+
+.spotify-controles .boton {
+  min-width: 56px;
+  justify-content: center;
+  font-size: 1.3rem;
+}
+
+.spotify-volumen {
+  width: min(100%, 320px);
+}
+
+.spotify-volumen input {
+  width: 100%;
+}
+
+.spotify-buscar {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+
+.spotify-buscar input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  background: var(--superficie);
+  color: var(--texto);
+  font: inherit;
+}
+
+.spotify-resultados,
+.spotify-listas {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+
+.spotify-subtitulo {
+  justify-self: start;
+  margin: 6px 0 0;
+  font-size: 1rem;
+}
+
+.spotify-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 6px 10px 6px 6px;
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  background: var(--superficie);
+  color: var(--texto);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.spotify-item:hover {
+  border-color: #1ed760;
+}
+
+.spotify-item img,
+.spotify-sin-imagen {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.spotify-sin-imagen {
+  display: grid;
+  place-items: center;
+  background: var(--superficie-2);
+  color: var(--texto-suave);
+}
+
+.spotify-item > span {
+  display: grid;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.spotify-item small {
+  color: var(--texto-suave);
+}
+
+.spotify-aviso:empty {
+  display: none;
+}

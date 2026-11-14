@@ -1,10 +1,24 @@
-// Efectos de sonido de las utilidades (moneda, dados y ruleta), generados con Web Audio:
-// no hay archivos de audio. `ctx` es el AudioContext, ya sonando.
+// Efectos de sonido de las utilidades (moneda, dados y ruleta). La moneda y los dados usan
+// grabaciones reales (grabaciones.js); mientras no llegan, o sin conexión, suenan los
+// sintetizados con Web Audio de abajo. `ctx` es el AudioContext, ya sonando.
+import { crearGrabaciones } from './grabaciones.js';
+
+// [archivo, segundo en el que empieza el ruido de los dados] (se salta el silencio inicial)
+const DADOS = [
+  ['dados-1', 0],
+  ['dados-2', 0.08],
+  ['dados-3', 0.13],
+];
+// moneda-caer.mp3: los rebotes en la mesa empiezan a los 0,93 s
+const CAIDA_MONEDA = 0.93;
 
 export function crearEfectos(ctx) {
   const salida = ctx.createGain();
   salida.gain.value = 0.8;
   salida.connect(ctx.destination);
+  const grabaciones = crearGrabaciones(ctx, ['moneda-lanzar', 'moneda-caer', ...DADOS.map(([n]) => n)], salida);
+  grabaciones.cargar();
+  let ultimaTirada = 0;
 
   // medio segundo de ruido blanco, para los golpes
   const ruido = ctx.createBuffer(1, Math.floor(ctx.sampleRate / 2), ctx.sampleRate);
@@ -54,6 +68,12 @@ export function crearEfectos(ctx) {
      */
     moneda(vuelo = 1.1) {
       const t = ctx.currentTime + 0.01;
+      // grabada: el golpe del pulgar con su zumbido, y los rebotes al caer en la mesa
+      if (grabaciones.lista('moneda-lanzar') && grabaciones.lista('moneda-caer')) {
+        grabaciones.sonar('moneda-lanzar', t, { nivel: 0.9, desde: 0.03 });
+        grabaciones.sonar('moneda-caer', t + vuelo, { nivel: 0.9, desde: CAIDA_MONEDA });
+        return;
+      }
       tintineo(t, 0.3, 0.9);
       // en el aire: el mismo timbre, entrecortado por el giro, cada vez más lento
       const tremolo = ctx.createGain();
@@ -77,6 +97,19 @@ export function crearEfectos(ctx) {
         tintineo(t + vuelo + d, 0.26 / (i + 1), 0.25);
         soplo(t + vuelo + d, 0.03, 0.2 / (i + 1), 'bandpass', 2600, 1.5);
       });
+    },
+
+    /**
+     * Los dados rodando, grabados (una de tres tomas, distinta a la anterior). Devuelve false
+     * si las grabaciones no han llegado: entonces suenan los golpes sintetizados de `dado`.
+     */
+    tirada() {
+      const listas = DADOS.map((_, i) => i).filter((i) => grabaciones.lista(DADOS[i][0]));
+      if (!listas.length) return false;
+      const opciones = listas.length > 1 ? listas.filter((i) => i !== ultimaTirada) : listas;
+      ultimaTirada = opciones[Math.floor(Math.random() * opciones.length)];
+      const [nombre, desde] = DADOS[ultimaTirada];
+      return grabaciones.sonar(nombre, ctx.currentTime + 0.005, { nivel: 0.9, desde });
     },
 
     /** Un golpe de dado contra la mesa. `fuerza` de 0 a 1. */

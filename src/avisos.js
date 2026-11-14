@@ -1,11 +1,15 @@
 // Aviso de fotomultas: con el GPS, suena y muestra una franja cuando el carro se acerca a
 // una cámara de fotodetección en el sentido que ella vigila.
 //
-// El aviso es una voz («Cámara de fotomulta más adelante»), con un timbre corto antes. Si el
-// navegador no tiene voz en español, suenan tres pitidos en su lugar.
+// El aviso es una voz («Cámara de fotomulta más adelante. Límite sesenta…»), con un timbre corto
+// antes: la grabada (voz.js), o si no ha llegado, la del navegador; si el navegador tampoco
+// tiene voz en español, suenan tres pitidos en su lugar.
 // Se avisa una vez por cámara al entrar en su radio (300 m, o más si se va rápido: unos
 // 12 s de recorrido) y no se repite hasta haberse alejado. Si además se va por encima del
 // límite, suena un segundo aviso más agudo. La ubicación no sale del navegador.
+
+import { voz } from './voz.js';
+import { FRASES } from './frases-voz.js';
 
 const RADIO_MIN = 300; // metros
 const SEGUNDOS = 12; // a qué distancia en tiempo se quiere el aviso
@@ -103,15 +107,19 @@ export function crearAvisos({ camaras, alCambiar }) {
     if (sintesis.addEventListener) sintesis.addEventListener('voiceschanged', () => sintesis.getVoices());
   }
 
-  /** Dice `texto` con un timbre antes; si no hay voz en español (o falla), suenan `pitidos`. */
-  function avisar(texto, pitidos) {
-    const voz = vozEnEspanol();
-    if (!voz) return void pitar(pitidos);
+  /**
+   * Dice la frase grabada `id` (o `texto` con la voz del navegador, si la grabada no está) con
+   * un timbre antes; si tampoco hay voz en español (o falla), suenan `pitidos`.
+   */
+  function avisar(texto, pitidos, id) {
+    if (id && FRASES[id] && voz.decir([id], { antes: 0.2 })) return void pitar([[1175, 0.14]]);
+    const vozNavegador = vozEnEspanol();
+    if (!vozNavegador) return void pitar(pitidos);
     pitar([[1175, 0.14]]); // timbre: llama la atención antes de la frase
     try {
       const frase = new SpeechSynthesisUtterance(texto);
-      frase.voice = voz;
-      frase.lang = voz.lang;
+      frase.voice = vozNavegador;
+      frase.lang = vozNavegador.lang;
       frase.rate = 1;
       frase.volume = 1;
       frase.onerror = () => pitar(pitidos);
@@ -123,9 +131,9 @@ export function crearAvisos({ camaras, alCambiar }) {
   }
 
   const TRES = [[880, 0.16], [880, 0.16], [1175, 0.3]];
-  const sonarAviso = (camara) => avisar(`Cámara de fotomulta más adelante. Límite ${camara.limite} kilómetros por hora.`, TRES);
+  const sonarAviso = (camara) => avisar(`Cámara de fotomulta más adelante. Límite ${camara.limite} kilómetros por hora.`, TRES, `fotomulta-${camara.limite}`);
   const sonarExceso = (camara) =>
-    avisar(`Reduce la velocidad. El límite es ${camara.limite}.`, [[1568, 0.12], [1568, 0.12], [1568, 0.12], [1568, 0.12]]);
+    avisar(`Reduce la velocidad. El límite es ${camara.limite}.`, [[1568, 0.12], [1568, 0.12], [1568, 0.12], [1568, 0.12]], `exceso-${camara.limite}`);
 
   // -------------------------------------------------------------------------
   // GPS
@@ -203,10 +211,12 @@ export function crearAvisos({ camaras, alCambiar }) {
       if (bloqueo) bloqueo.release().catch(() => {});
       bloqueo = null;
       if (sintesis) sintesis.cancel();
+      voz.callar();
     } else if (!navigator.geolocation) {
       estado.gps = 'sin-soporte';
     } else {
       abrirAudio();
+      voz.cargar('fotomultas');
       estado.gps = 'pidiendo';
       vigilancia = navigator.geolocation.watchPosition(
         alUbicar,
@@ -239,9 +249,12 @@ export function crearAvisos({ camaras, alCambiar }) {
     /** Suena el aviso de muestra (al activarlo, para saber cómo suena y a qué volumen). */
     probar() {
       abrirAudio();
-      const sonar = () => avisar('Cámara de fotomulta más adelante.', TRES);
-      if (ctx && ctx.state !== 'running') ctx.resume().then(sonar, () => {});
-      else sonar();
+      // la muestra espera a que llegue la voz grabada (si tarda, suena la del navegador)
+      const sonar = () => avisar('Cámara de fotomulta más adelante.', TRES, 'fotomulta-prueba');
+      const conVoz = () =>
+        Promise.race([voz.cargar('fotomultas'), new Promise((r) => setTimeout(r, 1500))]).then(sonar);
+      if (ctx && ctx.state !== 'running') ctx.resume().then(conVoz, () => {});
+      else conVoz();
     },
   };
 }

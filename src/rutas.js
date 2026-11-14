@@ -126,9 +126,54 @@ function instruccion(paso) {
   }
 }
 
+// Frase grabada de cada maniobra (frases-voz.js). Sin nombres de calles: esos no se pueden
+// grabar por adelantado, así que la voz dice la maniobra y la franja de abajo, la vía.
+const VOZ_GIROS = {
+  left: 'giro-izquierda',
+  right: 'giro-derecha',
+  'slight left': 'leve-izquierda',
+  'slight right': 'leve-derecha',
+  'sharp left': 'cerrado-izquierda',
+  'sharp right': 'cerrado-derecha',
+  uturn: 'giro-u',
+};
+
+/** id de la frase de voz de un paso de OSRM, o null si no hace falta decir nada. */
+function vozDePaso(paso) {
+  const { type: tipo, modifier: modo, exit: salida } = paso.maneuver;
+  const lado = /left/.test(modo || '') ? 'izquierda' : /right/.test(modo || '') ? 'derecha' : '';
+  switch (tipo) {
+    case 'depart':
+    case 'new name':
+    case 'exit roundabout':
+    case 'exit rotary':
+      return null;
+    case 'arrive':
+      return 'llegas';
+    case 'roundabout':
+    case 'rotary':
+      return salida >= 1 && salida <= 5 ? `glorieta-${salida}` : 'glorieta';
+    case 'on ramp':
+      return lado ? `acceso-${lado}` : 'acceso';
+    case 'off ramp':
+      return lado ? `salida-${lado}` : 'salida';
+    case 'merge':
+      return lado ? `incorporate-${lado}` : 'incorporate';
+    case 'fork':
+      return lado ? `bifurcacion-${lado}` : 'bifurcacion-derecho';
+    case 'end of road':
+      return lado ? `final-${lado}` : null;
+    case 'continue':
+      // seguir por la misma vía no se anuncia, salvo un giro de verdad
+      return ['left', 'right', 'sharp left', 'sharp right', 'uturn'].includes(modo) ? VOZ_GIROS[modo] : null;
+    default:
+      return VOZ_GIROS[modo] || null;
+  }
+}
+
 /**
  * Ruta en carro entre dos puntos [latitud, longitud]. Devuelve
- * { puntos: [[lat, lon]], acumulado: [m], metros, segundos, pasos: [{ texto, via, desde, metros, segundos }] }
+ * { puntos: [[lat, lon]], acumulado: [m], metros, segundos, pasos: [{ texto, voz, via, desde, metros, segundos }] }
  * (`desde` = metros desde el inicio hasta donde se hace la maniobra) o lanza un error.
  */
 export async function calcularRuta(origen, destino, senal) {
@@ -147,7 +192,7 @@ export async function calcularRuta(origen, destino, senal) {
   let total = 0;
   for (const tramo of datos.routes[0].legs) {
     for (const paso of tramo.steps) {
-      pasos.push({ texto: instruccion(paso), via: paso.name || '', desde: total, metros: paso.distance, segundos: paso.duration });
+      pasos.push({ texto: instruccion(paso), voz: vozDePaso(paso), via: paso.name || '', desde: total, metros: paso.distance, segundos: paso.duration });
       for (const [longitud, latitud] of paso.geometry.coordinates) {
         const punto = [latitud, longitud];
         const ultimo = puntos[puntos.length - 1];

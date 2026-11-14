@@ -1,9 +1,11 @@
 // Sección «Utilidades»: herramientas rápidas para el carro, pensadas para tocar con el dedo.
-//   Moneda · Ruleta · Dados y número al azar · Temporizador · Cronómetro · Reloj · DJ música · Radio
+//   Moneda · Ruleta · Dados y número al azar · Temporizador · Cronómetro · Reloj · DJ música · Radio · Spotify · Bromas
 // Todo corre en el navegador. El temporizador, el cronómetro y la radio siguen andando al
 // cambiar de pestaña; la música del DJ se detiene al salir de él.
 import { crearPads, PADS, RITMOS } from './pads.js';
 import { crearEfectos } from './efectos.js';
+import { crearBromas } from './bromas.js';
+import { crearSpotify } from './spotify.js';
 
 const RADIO = {
   nombre: 'La Mega',
@@ -20,6 +22,8 @@ const HERRAMIENTAS = [
   { id: 'reloj', nombre: 'Reloj gigante', detalle: 'Con modo noche', emoji: '🕒' },
   { id: 'launchpad', nombre: 'DJ música', detalle: 'Pads y ritmos para tocar', emoji: '🎛️' },
   { id: 'radio', nombre: 'Radio', detalle: RADIO.nombre, emoji: '📻' },
+  { id: 'spotify', nombre: 'Spotify', detalle: 'Tu música, junto con la voz de la app', emoji: '🎧' },
+  { id: 'bromas', nombre: 'Bromas', detalle: '¿Quién fue?, mentiras y choque', emoji: '😈' },
 ];
 
 const RULETAS_INICIALES = [
@@ -64,7 +68,7 @@ function textoCrono(ms) {
  * mostrarlo en la barra de arriba aunque se esté en otra pestaña.
  * Devuelve { mostrar(visible), abrir(id), tecla(evento) }.
  */
-export function crearUtilidades(el, { leer, guardar, alTemporizador = () => {} }) {
+export function crearUtilidades(el, { leer, guardar, alTemporizador = () => {}, velocidadGps = () => null }) {
   const pref = {
     herramienta: null,
     ruletas: null,
@@ -238,6 +242,10 @@ export function crearUtilidades(el, { leer, guardar, alTemporizador = () => {} }
           </div>
           <p class="secundario">Es la transmisión en vivo de la emisora; gasta datos mientras suena. Sigue sonando al cambiar de pestaña.</p>
         </section>
+
+        <section class="util-herramienta" data-herramienta="spotify"><div class="spotify-caja"></div></section>
+
+        <section class="util-herramienta" data-herramienta="bromas"><div class="bromas"></div></section>
       </div>
     </div>`;
 
@@ -335,11 +343,19 @@ export function crearUtilidades(el, { leer, guardar, alTemporizador = () => {} }
     return oscilador;
   }
 
+  // Spotify (spotify.js): la música suena dentro de la app
+  const spotify = crearSpotify($('.spotify-caja'));
+
+  // Bromas (bromas.js): usan el mismo contexto de audio
+  const bromas = crearBromas($('.bromas'), { sonar: (fn) => cuandoSuene(() => fn(ctx)), velocidad: velocidadGps });
+
   // -------------------------------------------------------------------------
   // Navegación entre herramientas
   // -------------------------------------------------------------------------
   function abrir(id) {
     pref.herramienta = HERRAMIENTAS.some((h) => h.id === id) ? id : null;
+    // al abrir la moneda o los dados se bajan sus grabaciones, para que el primer lanzamiento ya suene real
+    if (pref.herramienta === 'moneda' || pref.herramienta === 'dados') efecto(() => {});
     recordar();
     pintar();
   }
@@ -352,6 +368,8 @@ export function crearUtilidades(el, { leer, guardar, alTemporizador = () => {} }
       seccion.hidden = !actual || seccion.dataset.herramienta !== actual.id;
     });
     if (actual) $('.util-nombre').textContent = actual.nombre;
+    if (!actual || actual.id !== 'bromas') bromas.detener();
+    if (actual && actual.id === 'spotify') spotify.mostrar(true);
     cuidarDj();
     pintarEstados();
     if (!actual) return;
@@ -585,13 +603,20 @@ export function crearUtilidades(el, { leer, guardar, alTemporizador = () => {} }
     mesaEl.classList.add('rodando');
     $('.dados-total').textContent = '…';
     let cuadros = 0;
+    // la tirada grabada; si aún no llega, el traqueteo sintetizado cuadro a cuadro
+    let grabada = false;
+    efecto((e) => {
+      grabada = e.tirada();
+    });
     const reloj = setInterval(() => {
       valoresDados = Array.from({ length: pref.dados }, () => azar(6) + 1);
       mesaEl.innerHTML = valoresDados.map(htmlDado).join('');
       cuadros += 1;
       // traqueteo mientras ruedan y un golpe más seco cuando se quedan quietos
-      efecto((e) => e.dado(cuadros < 9 ? 0.35 + Math.random() * 0.4 : 1));
-      if (cuadros === 9 && pref.dados > 1) setTimeout(() => efecto((e) => e.dado(0.7)), 45);
+      if (!grabada) {
+        efecto((e) => e.dado(cuadros < 9 ? 0.35 + Math.random() * 0.4 : 1));
+        if (cuadros === 9 && pref.dados > 1) setTimeout(() => efecto((e) => e.dado(0.7)), 45);
+      }
       if (cuadros < 9) return;
       clearInterval(reloj);
       rodando = false;
@@ -1066,7 +1091,10 @@ export function crearUtilidades(el, { leer, guardar, alTemporizador = () => {} }
     mostrar(ver) {
       visible = ver;
       if (ver) pintar();
-      else cuidarDj(); // al salir de la pestaña, la música del DJ se detiene
+      else {
+        cuidarDj(); // al salir de la pestaña, la música del DJ se detiene
+        bromas.detener();
+      }
       cuidarPantalla();
     },
     abrir,

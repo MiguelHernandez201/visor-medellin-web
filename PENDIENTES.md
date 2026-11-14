@@ -10,8 +10,9 @@ simulado. Conviene anotar qué falla para ajustarlo.
 
 - [ ] **Motor Tesla**: ¿el volumen alcanza sin subirle mucho al carro? ¿El sonido convence?
 - [ ] **Sonido en segundo plano**: ¿el motor y la radio siguen sonando al salir del navegador?
-- [ ] **Aviso de fotomultas**: ¿habla («Cámara de fotomulta más adelante») o solo pita? Si solo
-      pita, el navegador del carro no trae voz en español y hay que grabar o generar el audio.
+- [ ] **Voz grabada** (fotomultas, giros de la ruta y bromas): ¿se oye bien y a buen volumen?
+      Ya no depende de la voz del navegador del carro: son MP3 generados con ElevenLabs.
+- [ ] **Voz en los giros**: ¿avisa a tiempo? ¿Habla demasiado o muy poco?
 - [ ] **Mapa con el rumbo arriba**: ¿gira fluido? ¿Molesta que los nombres de las calles giren?
 - [ ] **Rutas**: ¿responden OSRM y Photon desde el navegador del carro? ¿Recalcula bien?
 - [ ] **Radio La Mega**: ¿reproduce? ¿Se corta?
@@ -55,8 +56,6 @@ los moteles. No se pudo probar en vivo desde aquí.
 
 ## 4. Mejoras propuestas que no se han hecho
 
-- [ ] **Voz en los giros de la ruta** («En 200 metros gira a la derecha»). Hoy solo se leen
-      en la franja de abajo.
 - [ ] **Pico y placa**: guardar la placa y avisar si hoy hay restricción; pintar las vías y
       zonas (la Alcaldía las publica en el mismo servidor de las fotomultas).
 - [ ] **Tráfico real en las rutas**: OSRM y Photon son servidores gratuitos de demostración y

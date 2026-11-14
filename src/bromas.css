@@ -1,0 +1,547 @@
+/* Herramienta «Bromas» de las utilidades (bromas.js) */
+.bromas {
+  display: grid;
+  justify-items: center;
+  gap: 16px;
+  width: 100%;
+}
+
+.bromas-pestanas .boton[aria-pressed="true"],
+.choque-esperas .boton[aria-pressed="true"] {
+  border-color: var(--acento);
+  background: var(--acento-tenue);
+}
+
+.broma {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  width: min(100%, 520px);
+}
+
+.broma[hidden] {
+  display: none;
+}
+
+.broma .secundario,
+.choque-texto {
+  max-width: 440px;
+  margin: 0;
+}
+
+.broma-subtitulo {
+  margin: 0;
+  color: var(--texto-suave);
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* ---------- ¿Quién fue? ---------- */
+.quien-carro {
+  width: min(62vw, 250px);
+}
+
+.quien-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.carro-cuerpo {
+  fill: #1b2638;
+  stroke: #3a4b66;
+  stroke-width: 2;
+}
+
+.carro-vidrio,
+.carro-espejo,
+.carro-rueda {
+  fill: #0b111b;
+  stroke: #3a4b66;
+  stroke-width: 1.5;
+}
+
+.quien-puesto {
+  cursor: pointer;
+  outline: none;
+}
+
+.puesto-silla,
+.puesto-cabecera {
+  fill: #2a3a54;
+  stroke: #4c6283;
+  stroke-width: 1.5;
+  transition: fill 0.08s, stroke 0.08s;
+}
+
+.puesto-nombre {
+  fill: var(--texto-suave);
+  font-size: 8.5px;
+  font-weight: 700;
+  text-anchor: middle;
+  pointer-events: none;
+}
+
+.puesto-humo {
+  font-size: 22px;
+  text-anchor: middle;
+  dominant-baseline: middle;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* el punto secreto del culpable elegido: pequeño a propósito */
+.puesto-marca {
+  fill: var(--texto-suave);
+  opacity: 0;
+}
+
+.quien-puesto.marcado .puesto-marca {
+  opacity: 0.8;
+}
+
+.quien-puesto:focus-visible .puesto-silla {
+  stroke: var(--acento);
+}
+
+.quien-puesto.activo .puesto-silla,
+.quien-puesto.activo .puesto-cabecera {
+  fill: #2f8f5b;
+  stroke: #5fe0a8;
+}
+
+.quien-puesto.culpable .puesto-silla,
+.quien-puesto.culpable .puesto-cabecera {
+  fill: var(--rojo);
+  stroke: #ffd0d5;
+  animation: culpable 0.5s ease-in-out infinite alternate;
+}
+
+.quien-puesto.culpable .puesto-nombre {
+  opacity: 0;
+}
+
+.quien-puesto.culpable .puesto-humo {
+  opacity: 1;
+}
+
+@keyframes culpable {
+  to {
+    fill: #ff9aa5;
+  }
+}
+
+.quien-rayo {
+  fill: #5fe0a8;
+  opacity: 0;
+  filter: drop-shadow(0 0 6px #5fe0a8);
+}
+
+.quien-carro.escaneando .quien-rayo {
+  opacity: 0.7;
+  animation: rayo 1.1s ease-in-out infinite alternate;
+}
+
+@keyframes rayo {
+  from {
+    transform: translateY(20px);
+  }
+  to {
+    transform: translateY(296px);
+  }
+}
+
+.quien-medidor {
+  width: min(100%, 320px);
+  height: 12px;
+  overflow: hidden;
+  border: 1px solid var(--borde);
+  border-radius: 999px;
+  background: var(--superficie);
+}
+
+.quien-medidor span {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #3ddc84, #ffd23f 60%, #ff4d5e);
+  transition: width 0.15s;
+}
+
+/* ---------- Detector de mentiras ---------- */
+.mentira-monitor {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  padding: 14px;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: #071009;
+}
+
+.mentira-datos {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mentira-pulso {
+  position: relative;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #5fe0a8;
+  font: inherit;
+  cursor: default;
+}
+
+.mentira-pulso b {
+  min-width: 2.2ch;
+  font-size: 1.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.mentira-pulso small {
+  color: var(--texto-suave);
+}
+
+.mentira-corazon {
+  display: inline-block;
+  color: var(--rojo);
+  font-size: 1.4rem;
+}
+
+.mentira-corazon.late {
+  animation: latido 0.3s ease-out;
+}
+
+@keyframes latido {
+  30% {
+    transform: scale(1.35);
+  }
+}
+
+/* el punto secreto: casi invisible a propósito */
+.mentira-marca {
+  position: absolute;
+  left: 7px;
+  bottom: -4px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+}
+
+.mentira-marca.verdad {
+  background: var(--nivel-1);
+}
+
+.mentira-marca.mentira {
+  background: var(--rojo);
+}
+
+.mentira-estado {
+  color: var(--texto-suave);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.9rem;
+}
+
+.mentira-grafica {
+  width: 100%;
+  height: 80px;
+  background-image: linear-gradient(rgba(95, 224, 168, 0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(95, 224, 168, 0.08) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.mentira-grafica polyline {
+  fill: none;
+  stroke: #5fe0a8;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.mentira-barra {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(95, 224, 168, 0.12);
+}
+
+.mentira-barra span {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: #5fe0a8;
+}
+
+.mentira-huella {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  width: 190px;
+  padding: 18px 14px 14px;
+  border: 2px dashed #3a4b66;
+  border-radius: 24px;
+  background: var(--superficie);
+  color: var(--texto-suave);
+  font: inherit;
+  font-weight: 600;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.mentira-huella svg {
+  width: 90px;
+  height: 108px;
+  overflow: hidden;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.huella-rayo {
+  fill: #5fe0a8;
+  stroke: none;
+  opacity: 0;
+}
+
+.mentira-huella.leyendo {
+  border-color: #5fe0a8;
+  color: #5fe0a8;
+  box-shadow: 0 0 24px rgba(95, 224, 168, 0.35);
+}
+
+.mentira-huella.leyendo .huella-rayo {
+  opacity: 0.85;
+  animation: huella 0.9s ease-in-out infinite alternate;
+}
+
+@keyframes huella {
+  to {
+    transform: translateY(114px);
+  }
+}
+
+.mentira-resultado.verdad,
+.mentira-resultado.mentira {
+  font-size: clamp(2.4rem, 9vw, 4rem);
+}
+
+.mentira-resultado.verdad {
+  color: var(--nivel-1);
+}
+
+.mentira-resultado.mentira {
+  color: var(--rojo);
+  animation: parpadeo 0.25s steps(2) 6;
+}
+
+[data-panel="mentira"].mentira .mentira-monitor {
+  border-color: var(--rojo);
+  box-shadow: 0 0 30px rgba(255, 77, 94, 0.35);
+}
+
+[data-panel="mentira"].verdad .mentira-monitor {
+  border-color: var(--nivel-1);
+}
+
+@keyframes parpadeo {
+  50% {
+    opacity: 0.2;
+  }
+}
+
+/* ---------- Simulador de choque ---------- */
+.choque-confirmar {
+  display: grid;
+  gap: 10px;
+  max-width: 440px;
+  padding: 14px;
+  border: 1px solid var(--amarillo);
+  border-radius: var(--radio);
+  background: rgba(255, 210, 63, 0.08);
+}
+
+.choque-confirmar p {
+  margin: 0;
+}
+
+.choque-confirmar[hidden] {
+  display: none;
+}
+
+/* la capa cubre toda la app mientras dura la broma */
+.choque-capa {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.choque-capa.fase-frenazo {
+  animation: frenazo 0.22s steps(2) infinite;
+}
+
+@keyframes frenazo {
+  50% {
+    box-shadow: inset 0 0 0 18px var(--rojo);
+    background: rgba(255, 77, 94, 0.18);
+  }
+}
+
+.choque-aviso {
+  padding: 18px 30px;
+  border-radius: 18px;
+  background: var(--rojo);
+  color: #fff;
+  font-size: clamp(2.4rem, 10vw, 5rem);
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+}
+
+.choque-capa.fase-golpe,
+.choque-capa.fase-alerta {
+  background: rgba(5, 7, 13, 0.35);
+}
+
+.choque-capa.fase-golpe {
+  animation: temblor 0.5s linear;
+}
+
+@keyframes temblor {
+  10%,
+  50%,
+  90% {
+    transform: translate(-14px, 8px) rotate(-0.6deg);
+  }
+  30%,
+  70% {
+    transform: translate(12px, -10px) rotate(0.6deg);
+  }
+}
+
+.choque-destello {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  animation: destello 0.6s ease-out forwards;
+  pointer-events: none;
+}
+
+@keyframes destello {
+  to {
+    opacity: 0;
+  }
+}
+
+.choque-grietas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.choque-grietas .grieta {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.9);
+  stroke-width: 1.6;
+  stroke-linejoin: bevel;
+}
+
+.choque-grietas .grieta-sombra {
+  fill: none;
+  stroke: rgba(0, 0, 0, 0.55);
+  stroke-width: 4;
+}
+
+.choque-grietas .grieta-golpe {
+  fill: rgba(255, 255, 255, 0.35);
+  stroke: rgba(255, 255, 255, 0.9);
+  stroke-width: 2;
+}
+
+.choque-alerta {
+  position: relative;
+  display: grid;
+  gap: 8px;
+  max-width: calc(100vw - 32px);
+  padding: 22px 28px;
+  border: 2px solid var(--rojo);
+  border-radius: 18px;
+  background: rgba(13, 20, 32, 0.92);
+  color: var(--texto);
+  font-size: 1.15rem;
+  text-align: center;
+  box-shadow: 0 0 50px rgba(255, 77, 94, 0.5);
+  animation: alerta 0.6s ease-in-out infinite alternate;
+}
+
+.choque-alerta strong {
+  color: var(--rojo);
+  font-size: clamp(1.6rem, 6vw, 2.4rem);
+}
+
+.choque-cuenta {
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes alerta {
+  to {
+    box-shadow: 0 0 90px rgba(255, 77, 94, 0.85);
+  }
+}
+
+.choque-capa.fase-broma {
+  background: rgba(5, 7, 13, 0.9);
+  cursor: pointer;
+}
+
+.choque-capa.fase-broma .choque-grietas {
+  opacity: 0.2;
+}
+
+.choque-broma {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  color: var(--texto);
+  animation: broma 0.5s cubic-bezier(0.2, 1.6, 0.4, 1);
+}
+
+.choque-broma span {
+  font-size: clamp(5rem, 22vw, 9rem);
+  line-height: 1;
+}
+
+.choque-broma strong {
+  color: var(--amarillo);
+  font-size: clamp(2.6rem, 11vw, 5rem);
+}
+
+.choque-broma small {
+  color: var(--texto-suave);
+  font-size: 1rem;
+}
+
+@keyframes broma {
+  from {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+}
