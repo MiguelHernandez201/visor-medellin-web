@@ -47,6 +47,7 @@ import { registrarServiceWorker, prepararInstalacion } from './pwa.js';
 import { crearMotor } from './motor.js';
 import { FOTOMULTAS, revisarFotomultas, alActualizarFotomultas } from './fotomultas.js';
 import { CARGADORES, REDES, nombreRed, revisarCargadores, alActualizarCargadores } from './cargadores.js';
+import { MOTELES, revisarMoteles, alActualizarMoteles } from './moteles.js';
 import { crearAvisos } from './avisos.js';
 import { crearUbicacion } from './ubicacion.js';
 import {
@@ -139,7 +140,6 @@ if (LISTAS.includes(seccion)) listaCamaras = seccion;
 const filtros = { favoritas: leerPreferencia('soloFavoritas', false), lluvia: false, alerta: false, texto: '' };
 let modoLluvia = leerPreferencia('modoLluvia', 'radar');
 if (!MODOS_LLUVIA.some((m) => m.id === modoLluvia)) modoLluvia = 'radar';
-let verFotomultas = leerPreferencia('fotomultas', true);
 const vistaMapa = leerPreferencia('vistaMapa', { centro: [6.2476, -75.5758], zoom: 12 });
 
 // ---------------------------------------------------------------------------
@@ -328,10 +328,10 @@ app.innerHTML = `
         <div class="capas-lluvia" role="group" aria-label="Capa de lluvia">
           ${MODOS_LLUVIA.map((m) => `<button type="button" data-modo="${m.id}" aria-pressed="false">${m.titulo}</button>`).join('')}
         </div>
-        <button class="boton-fotomultas" type="button" aria-pressed="false" title="Cámaras de fotodetección de la Secretaría de Movilidad"><span class="fotomulta">60</span><span>Fotomultas</span></button>
+        <button class="boton-filtros" type="button" aria-expanded="false" title="Elegir qué se ve en el mapa">${ICONOS.filtros}<span>Filtros</span></button>
+        <div class="filtros-mapa" hidden></div>
         <button class="boton-aviso" type="button" aria-pressed="false" title="Suena al acercarte a una fotomulta (usa el GPS)">${ICONOS.campana}<span>Aviso sonoro</span></button>
         <button class="boton-panel" type="button" aria-expanded="true"></button>
-        <button class="boton-cargadores" type="button" aria-pressed="false" title="Cargadores públicos para carros eléctricos (OpenStreetMap)"><span class="cargador red-epm">${ICONOS.rayo}</span><span>Cargadores</span></button>
         <button class="boton-ruta" type="button" aria-pressed="false" title="Buscar una ruta en carro">${ICONOS.ruta}<span>Ruta</span></button>
         <button class="boton-icono boton-ubicar" type="button" aria-pressed="false" aria-label="Ver mi carro en el mapa" title="Ver mi carro en el mapa">${ICONOS.ubicar}</button>
         <span class="nota-ubicacion" hidden></span>
@@ -352,6 +352,7 @@ app.innerHTML = `
             <span><span class="punto punto-siata lluvia-2"></span>Llueve</span>
             <span class="leyenda-fotomulta"><span class="fotomulta">60</span>Fotomulta y su límite</span>
             <span class="leyenda-cargador"><span class="cargador red-epm">${ICONOS.rayo}</span>Cargador</span>
+            <span class="leyenda-motel"><span class="motel">${ICONOS.corazon}</span>Motel</span>
           </span>
           <span class="leyenda-frescura"></span>
         </div>
@@ -369,6 +370,8 @@ app.innerHTML = `
           <button class="boton ruta-elegir" type="button">${ICONOS.destino}<span>Elegir el destino en el mapa</span></button>
           <p class="ruta-estado" hidden></p>
           <div class="ruta-contenido"></div>
+          <div class="ruta-trafico" hidden></div>
+          <div class="ruta-puntos" hidden></div>
           <p class="secundario ruta-pie">Sale desde tu ubicación. Rutas de OSRM y lugares de Photon sobre OpenStreetMap: no tienen en cuenta el tráfico, el pico y placa ni los cierres.</p>
         </div>
         <div class="panel-vacio">
@@ -456,10 +459,10 @@ const grillaEl = $('.grilla');
 const vacioEl = $('.lista-vacia');
 const pieSimmEl = $('.pie-simm');
 const capasEl = $('.capas-lluvia');
-const botonFotomultasEl = $('.boton-fotomultas');
+const botonFiltrosEl = $('.boton-filtros');
+const filtrosMapaEl = $('.filtros-mapa');
 const botonAvisoEl = $('.boton-aviso');
 const botonRutaEl = $('.boton-ruta');
-const botonCargadoresEl = $('.boton-cargadores');
 const botonPanelEl = $('.boton-panel');
 const botonUbicarEl = $('.boton-ubicar');
 const notaUbicacionEl = $('.nota-ubicacion');
@@ -698,7 +701,7 @@ function pintarCamara(id) {
     pintarInsignias(id, tarjeta.lluvia, tarjeta.nivel);
   }
   if (seccion === 'mapa' && id === elegida) pintarPanel();
-  if (ruta && rutaAbierta && ruta.camaras.some((c) => c.lugar.id === id)) pintarFotosRuta();
+  if (ruta && rutaAbierta && ruta.camaras[camaraRuta] && ruta.camaras[camaraRuta].lugar.id === id) pintarTrafico();
   if (visor && visor.lista[visor.indice] === id) pintarVisor();
 }
 
@@ -756,14 +759,14 @@ function elegirEnMapa(id) {
 function capasLluvia() {
   const pluvios = pluviometros();
   const modo = MODOS_LLUVIA.find((m) => m.id === modoLluvia);
-  if (modoLluvia === 'calor') return { calor: pluvios, gotas: pluvios, titulo: modo.leyenda };
+  if (modoLluvia === 'calor') return { calor: pluvios, gotas: filtrosMapa.pluvios ? pluvios : null, titulo: modo.leyenda };
   if (modoLluvia === 'animacion') {
     const cuadros = cuadrosRadar();
     if (!cuadros.length) return { radar: imagenRadar(), titulo: `${modo.leyenda} · cargando…` };
     const cuadro = cuadros[Math.min(cuadroAnimacion, cuadros.length - 1)];
     return { radar: cuadro, titulo: `${modo.leyenda} · ${cuadro.hora}` };
   }
-  return { radar: imagenRadar(), gotas: pluvios, titulo: modo.leyenda };
+  return { radar: imagenRadar(), gotas: filtrosMapa.pluvios ? pluvios : null, titulo: modo.leyenda };
 }
 
 function pintarLluviaMapa() {
@@ -788,7 +791,7 @@ function marcarMapa() {
 function pintarMapa() {
   if (!mapa || seccion !== 'mapa') return;
   mapa.ponerCamaras(
-    camarasDeSeccion('mapa').map((id) => {
+    camarasEnMapa().map((id) => {
       const [latitud, longitud] = coordenadasCamara(id);
       return { id, latitud, longitud };
     }),
@@ -797,12 +800,6 @@ function pintarMapa() {
   pintarLluviaMapa();
   pintarPanel();
 }
-
-botonFotomultasEl.addEventListener('click', () => {
-  verFotomultas = !verFotomultas;
-  guardarPreferencia('fotomultas', verFotomultas);
-  pintarFotomultas();
-});
 
 capasEl.addEventListener('click', (evento) => {
   const boton = evento.target.closest('[data-modo]');
@@ -827,9 +824,117 @@ function htmlFotomulta(camara) {
     <span>Detecta: ${escapar(detecta.join(', '))}.</span>`;
 }
 
-// Cargadores de carros eléctricos (cargadores.js): capa del mapa que se puede ocultar.
-let verCargadores = leerPreferencia('cargadores', true);
+// ---------------------------------------------------------------------------
+// Filtros del mapa: qué marcas se ven (cámaras por tipo, fotomultas, cargadores por red,
+// moteles y pluviómetros). Se recuerdan en este navegador.
+// ---------------------------------------------------------------------------
+const filtrosMapa = {
+  simm: true,
+  siata: true,
+  rios: true,
+  fotomultas: leerPreferencia('fotomultas', true), // lo que tenía el botón de antes
+  cargadores: leerPreferencia('cargadores', true),
+  moteles: true,
+  pluvios: true,
+  redes: {}, // red de carga → false si está oculta
+  ...leerPreferencia('filtrosMapa', {}),
+};
+if (!filtrosMapa.redes || typeof filtrosMapa.redes !== 'object') filtrosMapa.redes = {};
 let versionCargadores = 0;
+let versionMoteles = 0;
+
+/** Cámaras que se ven en el mapa, según los filtros. */
+const camarasEnMapa = () => camarasDeSeccion('mapa').filter((id) => filtrosMapa[fuenteDe(id)]);
+/** Cargadores que se ven en el mapa: los de las redes que no están ocultas. */
+const cargadoresEnMapa = () => CARGADORES.filter((c) => filtrosMapa.redes[c.red] !== false);
+
+const GRUPOS_FILTRO = [
+  {
+    titulo: 'Cámaras',
+    filtros: [
+      { clave: 'simm', nombre: 'Tránsito · SIMM', marca: '<span class="punto punto-simm"></span>', cuenta: () => camarasDeSeccion('mapa').filter((id) => fuenteDe(id) === 'simm').length },
+      { clave: 'siata', nombre: 'SIATA', marca: '<span class="punto punto-siata"></span>', cuenta: () => camarasDeSeccion('mapa').filter((id) => fuenteDe(id) === 'siata').length },
+      { clave: 'rios', nombre: 'Ríos y quebradas', marca: '<span class="punto punto-rios"></span>', cuenta: () => camarasDeSeccion('mapa').filter((id) => fuenteDe(id) === 'rios').length },
+    ],
+  },
+  { titulo: 'En la vía', filtros: [{ clave: 'fotomultas', nombre: 'Fotomultas', marca: '<span class="fotomulta">60</span>', cuenta: () => FOTOMULTAS.length }] },
+  { titulo: 'Carga eléctrica', filtros: [{ clave: 'cargadores', nombre: 'Cargadores', marca: `<span class="cargador red-epm">${ICONOS.rayo}</span>`, cuenta: () => CARGADORES.length, redes: true }] },
+  { titulo: 'Lugares', filtros: [{ clave: 'moteles', nombre: 'Moteles', marca: `<span class="motel">${ICONOS.corazon}</span>`, cuenta: () => MOTELES.length }] },
+  { titulo: 'Lluvia', filtros: [{ clave: 'pluvios', nombre: 'Pluviómetros donde llueve', marca: '<span class="gota nivel-2"></span>', cuenta: () => (pluviometros() || []).filter((p) => p.nivel).length }] },
+];
+const CLAVES_FILTRO = GRUPOS_FILTRO.flatMap((grupo) => grupo.filtros.map((f) => f.clave));
+
+let filtrosPintados = '';
+function pintarFiltros() {
+  const ocultos = CLAVES_FILTRO.filter((clave) => !filtrosMapa[clave]).length + (filtrosMapa.cargadores ? REDES.filter((red) => filtrosMapa.redes[red.id] === false && CARGADORES.some((c) => c.red === red.id)).length : 0);
+  botonFiltrosEl.querySelector('span').textContent = ocultos ? `Filtros · ${ocultos} ${ocultos === 1 ? 'oculto' : 'ocultos'}` : 'Filtros';
+  botonFiltrosEl.classList.toggle('con-filtros', ocultos > 0);
+  if (filtrosMapaEl.hidden) return;
+  const html = `
+    <div class="filtros-cabeza"><h2>Qué ver en el mapa</h2><button class="boton-icono" type="button" data-filtros="cerrar" aria-label="Cerrar">${ICONOS.cerrar}</button></div>
+    <div class="filtros-rapidos">
+      <button class="boton" type="button" data-filtros="todo">Todo</button>
+      <button class="boton" type="button" data-filtros="camaras">Solo cámaras</button>
+      <button class="boton" type="button" data-filtros="nada">Nada</button>
+    </div>
+    ${GRUPOS_FILTRO.map(
+      (grupo) => `<h3>${grupo.titulo}</h3>${grupo.filtros
+        .map((f) => {
+          const fila = `<label class="filtro-fila"><input type="checkbox" data-filtro="${f.clave}"${filtrosMapa[f.clave] ? ' checked' : ''}><span class="filtro-marca">${f.marca}</span><span class="filtro-nombre">${f.nombre}</span><span class="filtro-cuenta">${f.cuenta()}</span></label>`;
+          if (!f.redes) return fila;
+          // las redes de carga que hay en la lista, cada una con su color
+          const redes = REDES.map((red) => ({ red, cuantos: CARGADORES.filter((c) => c.red === red.id).length }))
+            .filter((r) => r.cuantos)
+            .map(
+              ({ red, cuantos }) =>
+                `<label class="filtro-red"><input type="checkbox" data-red="${red.id}"${filtrosMapa.redes[red.id] !== false ? ' checked' : ''}${filtrosMapa.cargadores ? '' : ' disabled'}><span class="cargador red-${red.id}">${ICONOS.rayo}</span><span>${red.nombre}</span><span class="filtro-cuenta">${cuantos}</span></label>`,
+            )
+            .join('');
+          return `${fila}<div class="filtro-redes">${redes}</div>`;
+        })
+        .join('')}`,
+    ).join('')}
+    <p class="secundario">Fotomultas: Alcaldía de Medellín. Cargadores y moteles: OpenStreetMap, puede faltar alguno.</p>`;
+  if (html !== filtrosPintados) {
+    filtrosPintados = html;
+    filtrosMapaEl.innerHTML = html;
+  }
+}
+
+/** Guarda los filtros y repinta todas las capas del mapa. */
+function aplicarFiltros() {
+  guardarPreferencia('filtrosMapa', filtrosMapa);
+  versionCargadores += 1; // la capa de cargadores depende de las redes elegidas
+  if (elegida != null && !filtrosMapa[fuenteDe(elegida)]) elegida = null;
+  pintarMapa();
+  pintarFotomultas();
+}
+
+function abrirFiltros(abrir) {
+  filtrosMapaEl.hidden = !abrir;
+  botonFiltrosEl.setAttribute('aria-expanded', String(abrir));
+  pintarFiltros();
+}
+
+botonFiltrosEl.addEventListener('click', () => abrirFiltros(filtrosMapaEl.hidden));
+
+filtrosMapaEl.addEventListener('change', (evento) => {
+  const entrada = evento.target;
+  if (entrada.dataset.filtro) filtrosMapa[entrada.dataset.filtro] = entrada.checked;
+  else if (entrada.dataset.red) filtrosMapa.redes[entrada.dataset.red] = entrada.checked;
+  else return;
+  aplicarFiltros();
+});
+
+filtrosMapaEl.addEventListener('click', (evento) => {
+  const boton = evento.target.closest('[data-filtros]');
+  if (!boton) return;
+  const accion = boton.dataset.filtros;
+  if (accion === 'cerrar') return void abrirFiltros(false);
+  for (const clave of CLAVES_FILTRO) filtrosMapa[clave] = accion === 'todo' || (accion === 'camaras' && ['simm', 'siata', 'rios'].includes(clave));
+  if (accion === 'todo') filtrosMapa.redes = {};
+  aplicarFiltros();
+});
 
 /** Globo de un cargador: red, lugar, conectores, potencia y botón para trazar la ruta. */
 function htmlCargador(c) {
@@ -853,20 +958,58 @@ function htmlCargador(c) {
 const destinoCargador = (c) => ({ nombre: c.nombre, detalle: `Cargador · ${nombreRed(c.red)}`, latitud: c.latitud, longitud: c.longitud });
 
 function pintarCargadores() {
-  botonCargadoresEl.setAttribute('aria-pressed', String(verCargadores));
-  $('.leyenda-cargador').hidden = !verCargadores;
-  if (mapa) mapa.cargadores(verCargadores ? CARGADORES : null, htmlCargador, (c) => fijarDestino(destinoCargador(c)), versionCargadores);
+  $('.leyenda-cargador').hidden = !filtrosMapa.cargadores;
+  if (!mapa) return;
+  mapa.puntos(
+    'cargadores',
+    filtrosMapa.cargadores ? cargadoresEnMapa() : null,
+    {
+      icono: (c) => `<span class="cargador red-${c.red}">${ICONOS.rayo}</span>`,
+      titulo: (c) => `Cargador · ${c.nombre}`,
+      html: htmlCargador,
+      alIr: (c) => fijarDestino(destinoCargador(c)),
+    },
+    versionCargadores,
+  );
 }
 
-botonCargadoresEl.addEventListener('click', () => {
-  verCargadores = !verCargadores;
-  guardarPreferencia('cargadores', verCargadores);
-  pintarCargadores();
+/** Globo de un motel: nombre, dirección, contacto y botón para trazar la ruta. */
+function htmlMotel(m) {
+  return `<strong>${escapar(m.nombre)}</strong>
+    <span>Motel${m.direccion ? ` · ${escapar(m.direccion)}` : ''}</span>
+    ${m.telefono ? `<span>${escapar(m.telefono)}</span>` : ''}
+    ${m.web ? `<a href="${escapar(m.web)}" target="_blank" rel="noopener noreferrer">Sitio web</a>` : ''}
+    <button class="boton boton-principal globo-ir" type="button">${ICONOS.ruta}<span>Ir aquí</span></button>`;
+}
+
+const destinoMotel = (m) => ({ nombre: m.nombre, detalle: `Motel${m.direccion ? ` · ${m.direccion}` : ''}`, latitud: m.latitud, longitud: m.longitud });
+
+function pintarMoteles() {
+  $('.leyenda-motel').hidden = !filtrosMapa.moteles;
+  if (!mapa) return;
+  mapa.puntos(
+    'moteles',
+    filtrosMapa.moteles ? MOTELES : null,
+    {
+      icono: () => `<span class="motel">${ICONOS.corazon}</span>`,
+      titulo: (m) => `Motel · ${m.nombre}`,
+      html: htmlMotel,
+      alIr: (m) => fijarDestino(destinoMotel(m)),
+    },
+    versionMoteles,
+  );
+}
+
+alActualizarMoteles(() => {
+  versionMoteles += 1;
+  pintarMoteles();
+  pintarFiltros();
 });
 
 alActualizarCargadores(() => {
   versionCargadores += 1;
   pintarCargadores();
+  pintarFiltros();
 });
 
 // La lista de fotomultas se renueva sola desde el relevo (una vez al día).
@@ -882,10 +1025,11 @@ alActualizarFotomultas(() => {
 
 function pintarFotomultas() {
   if (!mapa) return;
-  mapa.fotomultas(verFotomultas ? FOTOMULTAS : null, htmlFotomulta, versionFotomultas);
+  mapa.fotomultas(filtrosMapa.fotomultas ? FOTOMULTAS : null, htmlFotomulta, versionFotomultas);
+  $('.leyenda-fotomulta').hidden = !filtrosMapa.fotomultas;
   pintarCargadores();
-  botonFotomultasEl.setAttribute('aria-pressed', String(verFotomultas));
-  $('.leyenda-fotomulta').hidden = !verFotomultas;
+  pintarMoteles();
+  pintarFiltros();
 }
 
 // El panel de la derecha del mapa se puede recoger para ver el mapa a todo lo ancho (se
@@ -1075,7 +1219,10 @@ async function buscarDestino(texto) {
   const cargadores = CARGADORES.filter((c) => normalizar(`${c.nombre} ${nombreRed(c.red)} ${c.operador} cargador`).includes(buscado))
     .slice(0, 4)
     .map(destinoCargador);
-  resultados = [...lugares, ...cargadores, ...camaras];
+  const moteles = MOTELES.filter((m) => normalizar(`${m.nombre} motel`).includes(buscado))
+    .slice(0, 4)
+    .map(destinoMotel);
+  resultados = [...lugares, ...cargadores, ...moteles, ...camaras];
   rutaEstado = resultados.length ? '' : fallo ? 'No se pudo buscar. Revisa la conexión o elige el destino en el mapa.' : 'No encontré ese lugar. Prueba con otro nombre o elige el destino en el mapa.';
   pintarRuta();
 }
@@ -1145,9 +1292,14 @@ async function calcularRuta(recalculo = false) {
       nueva,
       camarasDeSeccion('mapa').map((id) => ({ id, latitud: coordenadasCamara(id)[0], longitud: coordenadasCamara(id)[1] })),
       60,
-    ).slice(0, 12);
+    ).slice(0, 40);
+    nueva.cargadores = cercaDeRuta(nueva, CARGADORES, 150);
     nueva.recorrido = 0;
-    nueva.camaras.forEach((c) => revisarFoto(c.lugar.id));
+    // al recalcular se sigue viendo la misma cámara, si la ruta nueva también la tiene
+    const viendo = ruta && ruta.camaras[camaraRuta] ? ruta.camaras[camaraRuta].lugar.id : null;
+    const sigue = nueva.camaras.findIndex((c) => c.lugar.id === viendo);
+    camaraRuta = recalculo && sigue >= 0 ? sigue : 0;
+    nueva.camaras.slice(camaraRuta, camaraRuta + 2).forEach((c) => revisarFoto(c.lugar.id));
     ruta = nueva;
     rutaEstado = desdeCentro ? 'Sin GPS: la ruta sale del centro del mapa.' : '';
     mapa.ruta(ruta.puntos, [destino.latitud, destino.longitud]);
@@ -1180,7 +1332,9 @@ function guiar(posicion) {
   }
   fueraDeRuta = avance.fuera > 70 && posicion.precision < 60 ? fueraDeRuta + 1 : 0;
   if (fueraDeRuta >= 3 && Date.now() - ultimoCalculo > 8000 && !calculoRuta) calcularRuta(true);
-  pintarGuia(avance);
+  // con el panel de la ruta abierto, también se actualiza lo que falta para cada punto
+  if (rutaAbierta && seccion === 'mapa') pintarRuta();
+  else pintarGuia(avance);
 }
 
 let guiaPintada = '';
@@ -1242,13 +1396,106 @@ function lluviaEnRuta() {
   return { nivel, en: Math.max(0, inicio - desdeAqui), via: viaEn(ruta, inicio), metros: muestras * 250 };
 }
 
-/** Pone en las miniaturas de «Cámaras en la ruta» la foto que ya se tenga de cada una. */
-function pintarFotosRuta() {
-  if (!ruta) return;
-  panelRutaEl.querySelectorAll('[data-camara-ruta]').forEach((boton) => {
-    const camara = ruta.camaras[Number(boton.dataset.camaraRuta)];
-    if (camara) ponerFoto(boton.querySelector('img'), estados.get(camara.lugar.id));
-  });
+// Tráfico en la ruta: las cámaras que quedan sobre el trazado, una a la vez y en orden, para
+// pasar con «Siguiente» y ver cómo está la vía. Debajo, todo lo que la ruta se encuentra.
+let camaraRuta = 0; // cuál de ruta.camaras se está viendo
+let traficoDe = null; // ruta para la que se armó el visor
+
+/** "a 1,3 km", "aquí" o "ya pasó", según por dónde va el carro. */
+function textoFalta(desde) {
+  const falta = desde - ((ruta && ruta.recorrido) || 0);
+  if (falta < -60) return 'ya pasó';
+  return falta < 60 ? 'aquí' : `a ${textoDistancia(falta)}`;
+}
+
+function pintarTrafico() {
+  const caja = $('.ruta-trafico');
+  const hay = Boolean(ruta) && !resultados && ruta.camaras.length > 0;
+  caja.hidden = !hay;
+  if (!hay) {
+    traficoDe = null;
+    return;
+  }
+  if (traficoDe !== ruta) {
+    traficoDe = ruta;
+    caja.innerHTML = `
+      <h4>Tráfico en la ruta</h4>
+      <button class="trafico-foto" type="button" data-trafico="ampliar" aria-label="Ver en grande"><img alt="" hidden><span class="aviso"></span><span class="panel-ampliar">${ICONOS.ampliar}</span></button>
+      <div class="trafico-pie"><div><strong class="trafico-nombre"></strong><small class="trafico-detalle"></small></div><span class="trafico-cuenta"></span></div>
+      <div class="trafico-botones">
+        <button class="boton" type="button" data-trafico="-1">${ICONOS.anterior}<span>Anterior</span></button>
+        <button class="boton boton-principal" type="button" data-trafico="1"><span>Siguiente</span>${ICONOS.siguiente}</button>
+      </div>`;
+  }
+  camaraRuta = Math.min(Math.max(0, camaraRuta), ruta.camaras.length - 1);
+  const camara = ruta.camaras[camaraRuta];
+  const id = camara.lugar.id;
+  const estado = estados.get(id);
+  ponerFoto(caja.querySelector('img'), estado);
+  caja.querySelector('.aviso').textContent = textoAviso(estado);
+  caja.querySelector('.trafico-nombre').textContent = nombreCamara(id);
+  const edad = textoEdad(estado);
+  caja.querySelector('.trafico-detalle').textContent = [textoFalta(camara.desde), detalleCamara(id), edad ? `foto de ${edad}` : ''].filter(Boolean).join(' · ');
+  caja.querySelector('.trafico-cuenta').textContent = `${camaraRuta + 1} de ${ruta.camaras.length}`;
+  caja.querySelector('[data-trafico="-1"]').disabled = camaraRuta === 0;
+  caja.querySelector('[data-trafico="1"]').disabled = camaraRuta === ruta.camaras.length - 1;
+}
+
+/** Cambia la cámara del visor de tráfico y pide su foto (y la de la siguiente, para no esperar). */
+function verCamaraRuta(indice) {
+  if (!ruta || !ruta.camaras.length) return;
+  camaraRuta = Math.min(Math.max(0, indice), ruta.camaras.length - 1);
+  revisarFoto(ruta.camaras[camaraRuta].lugar.id);
+  const siguiente = ruta.camaras[camaraRuta + 1];
+  if (siguiente) revisarFoto(siguiente.lugar.id);
+  pintarTrafico();
+  pintarPuntosRuta();
+}
+
+let puntosPintados = '';
+/** Lista, en orden de recorrido, de lo que la ruta se encuentra: cámaras, fotomultas, cargadores y lluvia. */
+function pintarPuntosRuta() {
+  const caja = $('.ruta-puntos');
+  const hay = Boolean(ruta) && !resultados;
+  let html = '';
+  if (hay) {
+    const puntos = [
+      ...ruta.camaras.map((c, i) => ({
+        desde: c.desde,
+        html: `<button type="button" data-punto-camara="${i}"${i === camaraRuta ? ' aria-current="true"' : ''}><span class="punto-marca"><span class="punto punto-${fuenteDe(c.lugar.id)}"></span></span><span class="punto-texto"><strong>${escapar(nombreCamara(c.lugar.id))}</strong><small>Cámara · ${escapar(detalleCamara(c.lugar.id))}</small></span>`,
+      })),
+      ...ruta.fotomultas.map((f) => ({
+        desde: f.desde,
+        html: `<div><span class="punto-marca"><span class="fotomulta">${f.camara.limite}</span></span><span class="punto-texto"><strong>Fotomulta · ${escapar(f.camara.nombre)}</strong><small>Límite ${f.camara.limite} km/h · ${escapar(f.camara.direccion)}</small></span>`,
+      })),
+      ...ruta.cargadores.map((c) => ({
+        desde: c.desde,
+        html: `<div><span class="punto-marca"><span class="cargador red-${c.lugar.red}">${ICONOS.rayo}</span></span><span class="punto-texto"><strong>${escapar(c.lugar.nombre)}</strong><small>Cargador · ${escapar(nombreRed(c.lugar.red))}</small></span>`,
+      })),
+    ];
+    const lluvia = lluviaEnRuta();
+    if (lluvia && lluvia.nivel) {
+      puntos.push({
+        desde: (ruta.recorrido || 0) + lluvia.en,
+        html: `<div><span class="punto-marca nivel-lluvia-texto-${lluvia.nivel}">${ICONOS.gota}</span><span class="punto-texto"><strong>${NIVELES[lluvia.nivel]}</strong><small>Unos ${textoDistancia(lluvia.metros)} con lluvia${lluvia.via ? `, por ${escapar(lluvia.via)}` : ''} · radar</small></span>`,
+      });
+    }
+    puntos.sort((a, b) => a.desde - b.desde);
+    html = puntos.length
+      ? `<h4>En la ruta</h4><ol>${puntos
+          .map((p) => {
+            const falta = textoFalta(p.desde);
+            const cierre = p.html.startsWith('<button') ? '</button>' : '</div>';
+            return `<li${falta === 'ya pasó' ? ' class="pasado"' : ''}>${p.html}<span class="punto-falta">${falta}</span>${cierre}</li>`;
+          })
+          .join('')}</ol>`
+      : '';
+  }
+  caja.hidden = !html;
+  if (html !== puntosPintados) {
+    puntosPintados = html;
+    caja.innerHTML = html;
+  }
 }
 
 let rutaPintada = '';
@@ -1262,10 +1509,13 @@ function pintarRuta() {
       .map((r, i) => `<li><button type="button" data-resultado="${i}"><strong>${escapar(r.nombre)}</strong><span>${escapar(r.detalle)}</span></button></li>`)
       .join('')}</ul>`;
   } else if (ruta) {
-    const camaras = ruta.fotomultas;
-    const fotos = camaras.length
-      ? `<p class="ruta-fotomultas"><span class="fotomulta">${camaras.length}</span><span>${camaras.length === 1 ? 'Una fotomulta' : `${camaras.length} fotomultas`} en la ruta: ${escapar(camaras.map((c) => `${c.camara.nombre} (${c.camara.limite} km/h)`).join(', '))}</span></p>`
-      : '<p class="ruta-fotomultas secundario">Sin fotomultas conocidas en la ruta.</p>';
+    const cuenta = (n, uno, varios) => (n ? `${n} ${n === 1 ? uno : varios}` : '');
+    const hay = [
+      cuenta(ruta.camaras.length, 'cámara', 'cámaras'),
+      cuenta(ruta.fotomultas.length, 'fotomulta', 'fotomultas'),
+      cuenta(ruta.cargadores.length, 'cargador', 'cargadores'),
+    ].filter(Boolean);
+    const fotos = `<p class="ruta-conteo secundario">${hay.length ? `En la ruta: ${hay.join(' · ')}` : 'Sin cámaras ni fotomultas conocidas en la ruta.'}</p>`;
     const lluvia = lluviaEnRuta();
     let textoLluviaRuta = '';
     if (lluvia && lluvia.nivel) {
@@ -1279,14 +1529,6 @@ function pintarRuta() {
         ? `<span class="ruta-guardada">${icono}<span>Guardado como ${titulo.toLowerCase()}</span></span>`
         : `<button class="boton" type="button" data-ruta="${clave}">${icono}<span>Guardar como ${titulo.toLowerCase()}</span></button>`,
     ).join('');
-    const tira = ruta.camaras.length
-      ? `<div class="ruta-camaras"><h4>Cámaras en la ruta</h4><div class="ruta-tira">${ruta.camaras
-          .map(
-            (c, i) =>
-              `<button type="button" data-camara-ruta="${i}" title="${escapar(nombreCamara(c.lugar.id))}"><span class="ruta-foto"><img alt="" hidden></span><strong>${escapar(nombreCamara(c.lugar.id))}</strong><small>a ${textoDistancia(c.desde)}</small></button>`,
-          )
-          .join('')}</div></div>`
-      : '';
     html = `<div class="ruta-resumen">
         <h3>${escapar(destino.nombre)}</h3>
         <p class="ruta-cifras">${textoDistancia(ruta.metros)} · ${textoDuracion(ruta.segundos)} <span>sin tráfico</span></p>
@@ -1298,9 +1540,7 @@ function pintarRuta() {
           <button class="boton" type="button" data-ruta="quitar">Quitar ruta</button>
         </div>
         <div class="ruta-acciones">${guardar}</div>
-      </div>
-      ${tira}
-      <ol class="ruta-pasos">${ruta.pasos.map((p) => `<li><span>${escapar(p.texto)}</span><span class="ruta-metros">${p.metros >= 10 ? textoDistancia(p.metros) : ''}</span></li>`).join('')}</ol>`;
+      </div>`;
   } else if (destino) {
     html = `<div class="ruta-resumen"><h3>${escapar(destino.nombre)}</h3><div class="ruta-acciones"><button class="boton" type="button" data-ruta="reintentar">${ICONOS.recargar}<span>Reintentar</span></button><button class="boton" type="button" data-ruta="quitar">Quitar destino</button></div></div>`;
   } else {
@@ -1323,7 +1563,8 @@ function pintarRuta() {
     rutaPintada = html;
     $('.ruta-contenido').innerHTML = html;
   }
-  pintarFotosRuta();
+  pintarTrafico();
+  pintarPuntosRuta();
   pintarGuia(ruta && ubicacion.posicion() && !llegada ? seguirRuta(ruta, [ubicacion.posicion().latitud, ubicacion.posicion().longitud]) : null);
 }
 
@@ -1378,10 +1619,18 @@ panelRutaEl.addEventListener('click', (evento) => {
     if (lugar) fijarDestino(lugar);
     return;
   }
-  const camaraRuta = objetivo.closest('[data-camara-ruta]');
-  if (camaraRuta && ruta) {
-    abrirVisor(ruta.camaras.map((c) => c.lugar.id), Number(camaraRuta.dataset.camaraRuta));
-    visor.deRuta = true;
+  const trafico = objetivo.closest('[data-trafico]');
+  if (trafico && ruta) {
+    if (trafico.dataset.trafico === 'ampliar') {
+      abrirVisor(ruta.camaras.map((c) => c.lugar.id), camaraRuta);
+      visor.deRuta = true;
+    } else verCamaraRuta(camaraRuta + Number(trafico.dataset.trafico));
+    return;
+  }
+  const puntoCamara = objetivo.closest('[data-punto-camara]');
+  if (puntoCamara && ruta) {
+    verCamaraRuta(Number(puntoCamara.dataset.puntoCamara));
+    $('.ruta-trafico').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     return;
   }
   const accion = objetivo.closest('[data-ruta]');
@@ -1554,6 +1803,7 @@ function cerrarVisor() {
   if (!visor) return;
   const id = visor.lista[visor.indice];
   const deRuta = visor.deRuta;
+  if (deRuta) camaraRuta = visor.indice; // el visor de tráfico queda en la que se estaba viendo
   visor = null;
   visorEl.hidden = true;
   document.body.classList.remove('con-visor');
@@ -1804,9 +2054,13 @@ function tic() {
   revisarPluvios();
   revisarFotomultas();
   revisarCargadores();
+  revisarMoteles();
   if (seccion === 'mapa') {
     // las fotos de las cámaras de la ruta, mientras su panel está a la vista
-    if (ruta && rutaAbierta && !visor) ruta.camaras.forEach((c) => revisarFoto(c.lugar.id, ahora));
+    if (ruta && rutaAbierta && !visor) {
+      ruta.camaras.slice(camaraRuta, camaraRuta + 2).forEach((c) => revisarFoto(c.lugar.id, ahora));
+      pintarTrafico(); // la edad de la foto
+    }
     revisarAire();
     if (modoLluvia === 'animacion') revisarAnimacion();
   }

@@ -14,6 +14,7 @@
 //   datos/umbrales.json       últimos umbrales conocidos de cada estación (cm)
 //   datos/fotomultas.json     cámaras de fotodetección de la Alcaldía (se renueva una vez al día)
 //   datos/cargadores.json     cargadores de carros eléctricos, de OpenStreetMap (una vez al día)
+//   datos/moteles.json        moteles, de OpenStreetMap (en la misma consulta)
 //   datos/estado.json         cuándo se generó y qué falló
 //
 // Los archivos son las respuestas del geoportal tal cual, salvo niveles.json, al que se le
@@ -181,7 +182,8 @@ if (edadHoras < 20) {
 // Cargadores de carros eléctricos: OpenStreetMap (amenity=charging_station) en el Valle de
 // Aburrá y sus alrededores, por Overpass. Una vez al día; si falla, queda la lista anterior.
 const OVERPASS = 'https://overpass-api.de/api/interpreter';
-const CONSULTA = '[out:json][timeout:60];nwr["amenity"="charging_station"](5.95,-75.75,6.55,-75.25);out center tags;';
+const ZONA = '(5.95,-75.75,6.55,-75.25)';
+const CONSULTA = `[out:json][timeout:60];(nwr["amenity"="charging_station"]${ZONA};nwr["amenity"="love_hotel"]${ZONA};nwr["tourism"="motel"]${ZONA};);out center tags;`;
 const CONECTORES = {
   type2: 'Tipo 2',
   type2_cable: 'Tipo 2',
@@ -214,6 +216,7 @@ function leerCargadores(json) {
   const lista = [];
   for (const elemento of json.elements || []) {
     const t = elemento.tags || {};
+    if (t.amenity !== 'charging_station') continue;
     const latitud = elemento.lat ?? (elemento.center && elemento.center.lat);
     const longitud = elemento.lon ?? (elemento.center && elemento.center.lon);
     if (typeof latitud !== 'number' || typeof longitud !== 'number') continue;
@@ -248,6 +251,31 @@ function leerCargadores(json) {
   return lista;
 }
 
+function leerMoteles(json) {
+  const limpio = (texto) => String(texto || '').replace(/\s+/g, ' ').trim();
+  const lista = [];
+  for (const elemento of json.elements || []) {
+    const t = elemento.tags || {};
+    if (t.amenity !== 'love_hotel' && t.tourism !== 'motel') continue;
+    const latitud = elemento.lat ?? (elemento.center && elemento.center.lat);
+    const longitud = elemento.lon ?? (elemento.center && elemento.center.lon);
+    const nombre = limpio(t.name);
+    if (typeof latitud !== 'number' || typeof longitud !== 'number' || !nombre) continue;
+    if (t.disused === 'yes' || t.abandoned === 'yes') continue;
+    const calle = limpio([t['addr:street'], t['addr:housenumber']].filter(Boolean).join(' '));
+    lista.push({
+      id: `${elemento.type[0].toUpperCase()}${elemento.id}`,
+      nombre,
+      direccion: limpio([calle, t['addr:city']].filter(Boolean).join(', ')),
+      latitud: Math.round(latitud * 1e5) / 1e5,
+      longitud: Math.round(longitud * 1e5) / 1e5,
+      telefono: limpio(t.phone || t['contact:phone']),
+      web: limpio(t.website || t['contact:website']),
+    });
+  }
+  return lista;
+}
+
 const cargadoresAntes = leerJson('cargadores.json', null);
 const edadCargadores = cargadoresAntes && cargadoresAntes.leido ? (Date.now() - Date.parse(cargadoresAntes.leido)) / 3600000 : Infinity;
 if (edadCargadores < 20) {
@@ -264,10 +292,18 @@ if (edadCargadores < 20) {
       signal: AbortSignal.timeout(70000),
     });
     if (!respuesta.ok) throw new Error(`HTTP ${respuesta.status}`);
-    const cargadores = leerCargadores(await respuesta.json());
-    if (cargadores.length < 5) throw new Error(`respuesta rara (${cargadores.length} cargadores)`);
-    guardar('cargadores.json', { leido: new Date().toISOString(), fuente: '© Colaboradores de OpenStreetMap (ODbL)', cargadores });
-    estado.archivos['cargadores.json'] = { ok: true, cargadores: cargadores.length };
+    const json = await respuesta.json();
+    const leido = new Date().toISOString();
+    const fuente = '© Colaboradores de OpenStreetMap (ODbL)';
+    const cargadores = leerCargadores(json);
+    const moteles = leerMoteles(json);
+    if (cargadores.length < 5 && moteles.length < 5) throw new Error(`respuesta rara (${cargadores.length} cargadores, ${moteles.length} moteles)`);
+    // `leido` marca la consulta: aunque una de las dos listas venga corta, no se repite hasta mañana
+    if (cargadores.length >= 5) guardar('cargadores.json', { leido, fuente, cargadores });
+    else guardar('cargadores.json', { ...(cargadoresAntes || { cargadores: [] }), leido });
+    if (moteles.length >= 5) guardar('moteles.json', { leido, fuente, moteles });
+    estado.archivos['cargadores.json'] = { ok: cargadores.length >= 5, cargadores: cargadores.length };
+    estado.archivos['moteles.json'] = { ok: moteles.length >= 5, moteles: moteles.length };
   } catch (error) {
     estado.archivos['cargadores.json'] = { ok: false, error: String(error.message || error) };
   }

@@ -4,7 +4,7 @@
 // - la lluvia: el radar (o un cuadro de la animación) o el mapa de calor, en un <canvas>
 //   sobre el RECORTE del valle, y una gota en cada pluviómetro donde llueve.
 // - las cámaras de fotodetección (fotomultas), como señales con el límite de velocidad.
-// - los cargadores de carros eléctricos, con el color de su red.
+// - capas de puntos con globo: los cargadores de carros eléctricos y los moteles.
 // - el carro (flecha con el rumbo del GPS) y la ruta hasta un destino.
 // Fondo: teselas "World Dark Gray" de Esri (base y, encima de la lluvia, los nombres).
 import L from 'leaflet';
@@ -331,50 +331,49 @@ export function crearMapa(contenedor, { vista, alElegir, alMover, alTocar = () =
   // -------------------------------------------------------------------------
   // Cargadores de carros eléctricos
   // -------------------------------------------------------------------------
-  let capaCargadores = null;
-  let versionCargadores = 0;
+  const capasPuntos = new Map(); // clave → { capa, version }
 
   /**
-   * Muestra u oculta los cargadores. lista = [{ latitud, longitud, red, nombre }]; `html(c)`
-   * da el globo, y `alIr(c)` se llama al tocar su botón «Ir aquí» (clase .globo-ir).
+   * Muestra u oculta una capa de puntos con globo (cargadores, moteles…). `lista` = [{ latitud,
+   * longitud, … }] o null para ocultarla. `icono(p)` da el HTML de la marca, `titulo(p)` su
+   * texto, `html(p)` el globo, y `alIr(p)` se llama al tocar su botón «Ir aquí» (.globo-ir).
+   * Si cambia `version`, la capa se arma de nuevo (llegó otra lista o cambió el filtro).
    */
-  function cargadores(lista, html, alIr, version = 0) {
-    if (capaCargadores && version !== versionCargadores) {
-      capaCargadores.remove();
-      capaCargadores = null;
+  function puntos(clave, lista, { icono, titulo, html, alIr }, version = 0) {
+    if (!capasPuntos.has(clave)) capasPuntos.set(clave, { capa: null, version: 0 });
+    const estado = capasPuntos.get(clave);
+    if (estado.capa && version !== estado.version) {
+      estado.capa.remove();
+      estado.capa = null;
     }
-    versionCargadores = version;
+    estado.version = version;
     if (!lista) {
-      if (capaCargadores) capaCargadores.remove();
+      if (estado.capa) estado.capa.remove();
       return;
     }
-    if (!capaCargadores) {
-      capaCargadores = L.layerGroup();
-      for (const cargador of lista) {
-        const marca = L.marker([cargador.latitud, cargador.longitud], {
+    if (!estado.capa) {
+      estado.capa = L.layerGroup();
+      for (const punto of lista) {
+        const marca = L.marker([punto.latitud, punto.longitud], {
           pane: 'fotomultas',
           keyboard: false,
-          title: `Cargador · ${cargador.nombre}`,
-          icon: L.divIcon({
-            className: 'marcador',
-            html: `<span class="cargador red-${cargador.red}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.5 2.5L5 13.5h5.5l-1 8L18 10.5h-5.5z"/></svg></span>`,
-            iconSize: [0, 0],
-          }),
-        }).bindPopup(() => html(cargador), { className: 'globo', maxWidth: 270, offset: [0, -10] });
+          title: titulo(punto),
+          icon: L.divIcon({ className: 'marcador', html: icono(punto), iconSize: [0, 0] }),
+        }).bindPopup(() => html(punto), { className: 'globo', maxWidth: 270, offset: [0, -10] });
         // Leaflet no deja salir del globo los clics: el botón se conecta al abrirlo
         marca.on('popupopen', (evento) => {
           const boton = evento.popup.getElement().querySelector('.globo-ir');
           if (boton) {
             boton.onclick = () => {
               mapa.closePopup();
-              alIr(cargador);
+              alIr(punto);
             };
           }
         });
-        marca.addTo(capaCargadores);
+        marca.addTo(estado.capa);
       }
     }
-    if (!mapa.hasLayer(capaCargadores)) capaCargadores.addTo(mapa);
+    if (!mapa.hasLayer(estado.capa)) estado.capa.addTo(mapa);
   }
 
   let capaRuta = null;
@@ -478,7 +477,7 @@ export function crearMapa(contenedor, { vista, alElegir, alMover, alTocar = () =
     elegir,
     lluvia,
     fotomultas,
-    cargadores,
+    puntos,
     vehiculo,
     ruta,
     encuadrar,
