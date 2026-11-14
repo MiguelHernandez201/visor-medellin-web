@@ -3,6 +3,7 @@
 // Todo corre en el navegador. El temporizador, el cronómetro y la radio siguen andando al
 // cambiar de pestaña; la música del DJ se detiene al salir de él.
 import { crearPads, PADS, RITMOS } from './pads.js';
+import { crearEfectos } from './efectos.js';
 
 const RADIO = {
   nombre: 'La Mega',
@@ -248,6 +249,16 @@ export function crearUtilidades(el, { leer, guardar, alTemporizador = () => {} }
     return pads;
   };
 
+  // Efectos de la moneda, los dados y la ruleta: `efecto((e) => e.moneda())` suena apenas
+  // el audio esté listo (el toque que lanza o gira da el permiso).
+  let efectos = null;
+  function efecto(fn) {
+    cuandoSuene(() => {
+      if (!efectos) efectos = crearEfectos(ctx);
+      fn(efectos);
+    });
+  }
+
   /**
    * Llama a `fn` cuando el audio esté sonando de verdad. Un contexto recién creado tarda un
    * momento en arrancar, y lo que se dispare antes se pierde: por eso el primer toque no sonaba.
@@ -365,6 +376,7 @@ export function crearUtilidades(el, { leer, guardar, alTemporizador = () => {} }
     giroMoneda = base + vueltas * 360 + (cara ? 0 : 180);
     monedaCuerpo.style.transform = `rotateY(${giroMoneda}deg)`;
     $('.moneda-resultado').textContent = '…';
+    efecto((e) => e.moneda(1.1)); // el tintineo dura lo que la moneda en el aire
     setTimeout(() => {
       lanzando = false;
       cuentaMoneda[cara ? 'cara' : 'cruz'] += 1;
@@ -424,6 +436,21 @@ export function crearUtilidades(el, { leer, guardar, alTemporizador = () => {} }
     return opciones[Math.floor(local / (360 / opciones.length)) % opciones.length];
   }
 
+  // Chasquido cada vez que pasa una opción bajo la flecha, como la lengüeta de una ruleta.
+  let sectorArriba = -1;
+  let ultimoTic = 0;
+  function sonarPaso() {
+    const n = ruletaActual().opciones.length;
+    const sector = Math.floor(((((270 - angulo) % 360) + 360) % 360) / (360 / n)) % n;
+    if (sector === sectorArriba) return;
+    const primero = sectorArriba < 0;
+    sectorArriba = sector;
+    const ahora = performance.now();
+    if (primero || ahora - ultimoTic < 28) return; // muy rápido se vuelve un zumbido
+    ultimoTic = ahora;
+    efecto((e) => e.tic());
+  }
+
   let cuadroRuleta = 0;
   function girarRuleta(inicial) {
     velocidad = inicial;
@@ -437,9 +464,11 @@ export function crearUtilidades(el, { leer, guardar, alTemporizador = () => {} }
       angulo += velocidad * dt;
       velocidad *= Math.exp(-dt * 0.85);
       ruedaEl.style.transform = `rotate(${angulo}deg)`;
+      sonarPaso();
       if (Math.abs(velocidad) < 9) {
         girando = false;
         $('.ruleta-resultado').textContent = opcionArriba();
+        efecto((e) => e.campanita());
         return;
       }
       cuadroRuleta = requestAnimationFrame(paso);
@@ -470,6 +499,7 @@ export function crearUtilidades(el, { leer, guardar, alTemporizador = () => {} }
     arrastre.t = ahora;
     angulo += delta;
     ruedaEl.style.transform = `rotate(${angulo}deg)`;
+    sonarPaso();
   });
   const soltarRueda = () => {
     if (!arrastre) return;
@@ -539,6 +569,9 @@ export function crearUtilidades(el, { leer, guardar, alTemporizador = () => {} }
       valoresDados = Array.from({ length: pref.dados }, () => azar(6) + 1);
       mesaEl.innerHTML = valoresDados.map(htmlDado).join('');
       cuadros += 1;
+      // traqueteo mientras ruedan y un golpe más seco cuando se quedan quietos
+      efecto((e) => e.dado(cuadros < 9 ? 0.35 + Math.random() * 0.4 : 1));
+      if (cuadros === 9 && pref.dados > 1) setTimeout(() => efecto((e) => e.dado(0.7)), 45);
       if (cuadros < 9) return;
       clearInterval(reloj);
       rodando = false;
