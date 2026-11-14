@@ -1,7 +1,7 @@
 // Sección «Utilidades»: herramientas rápidas para el carro, pensadas para tocar con el dedo.
-//   Moneda · Ruleta · Dados y número al azar · Temporizador · Cronómetro · Reloj · Launchpad · Radio
-// Todo corre en el navegador y sigue andando al cambiar de pestaña (el temporizador, el
-// cronómetro, la radio y la base del launchpad no se detienen al salir de aquí).
+//   Moneda · Ruleta · Dados y número al azar · Temporizador · Cronómetro · Reloj · DJ música · Radio
+// Todo corre en el navegador. El temporizador, el cronómetro y la radio siguen andando al
+// cambiar de pestaña; la música del DJ se detiene al salir de él.
 import { crearPads, PADS, RITMOS } from './pads.js';
 
 const RADIO = {
@@ -17,14 +17,14 @@ const HERRAMIENTAS = [
   { id: 'temporizador', nombre: 'Temporizador', detalle: '5, 10, 15, 30, 45 min', emoji: '⏳' },
   { id: 'cronometro', nombre: 'Cronómetro', detalle: 'Con vueltas', emoji: '⏱️' },
   { id: 'reloj', nombre: 'Reloj gigante', detalle: 'Con modo noche', emoji: '🕒' },
-  { id: 'launchpad', nombre: 'Launchpad', detalle: 'Mesa de DJ táctil', emoji: '🎛️' },
+  { id: 'launchpad', nombre: 'DJ música', detalle: 'Pads y ritmos para tocar', emoji: '🎛️' },
   { id: 'radio', nombre: 'Radio', detalle: RADIO.nombre, emoji: '📻' },
 ];
 
 const RULETAS_INICIALES = [
   { nombre: '¿Dónde comemos?', opciones: ['Hamburguesa', 'Pizza', 'Sushi', 'Pollo', 'Mexicana', 'Típica'] },
   { nombre: '¿Quién conduce?', opciones: ['Yo', 'Tú'] },
-  { nombre: '¿Qué plan?', opciones: ['Cine', 'Mirador', 'Helado', 'Centro comercial', 'Casa'] },
+  { nombre: '¿Qué plan?', opciones: ['Cine', 'Mirador', 'Helado', 'Centro comercial', 'Casa', 'Rapidín', 'Motelear'] },
 ];
 const COLORES = ['#36c5ff', '#ff6fb1', '#ffd23f', '#3ddc84', '#ff8a1f', '#b388ff', '#ff4d5e', '#2ec7f0', '#7ac143', '#e040c8'];
 const ATAJOS = [5, 10, 15, 30, 45]; // minutos del temporizador
@@ -80,6 +80,12 @@ export function crearUtilidades(el, { leer, guardar, alTemporizador = () => {} }
     ...leer('utilidades', {}),
   };
   if (!Array.isArray(pref.ruletas) || !pref.ruletas.length) pref.ruletas = RULETAS_INICIALES;
+  // Quien ya tenía guardada la ruleta «¿Qué plan?» recibe una vez las dos opciones nuevas.
+  if (!pref.planConNuevas) {
+    pref.planConNuevas = true;
+    const plan = pref.ruletas.find((r) => r && r.nombre === '¿Qué plan?' && Array.isArray(r.opciones));
+    if (plan) for (const opcion of ['Rapidín', 'Motelear']) if (!plan.opciones.includes(opcion)) plan.opciones.push(opcion);
+  }
   if (!HERRAMIENTAS.some((h) => h.id === pref.herramienta)) pref.herramienta = null;
   if (!pref.cronometro || !Array.isArray(pref.cronometro.vueltas)) pref.cronometro = { base: 0, desde: null, vueltas: [] };
   const recordar = () => guardar('utilidades', pref);
@@ -197,7 +203,7 @@ export function crearUtilidades(el, { leer, guardar, alTemporizador = () => {} }
             </div>
             <label class="pads-tempo"><span class="pads-bpm"></span><input type="range" name="bpm" min="70" max="150" step="1"></label>
           </div>
-          <p class="secundario">Toca varios pads a la vez. La base es un ritmo que suena debajo para tocar encima. Los sonidos se generan en el navegador.</p>
+          <p class="secundario">Toca varios pads a la vez. La base es un ritmo que suena debajo para tocar encima; se detiene al salir del DJ. Los sonidos se generan en el navegador.</p>
         </section>
 
         <section class="util-herramienta" data-herramienta="radio">
@@ -220,7 +226,7 @@ export function crearUtilidades(el, { leer, guardar, alTemporizador = () => {} }
   let visible = false;
 
   // -------------------------------------------------------------------------
-  // Sonido: un solo contexto de audio para la alarma y el launchpad
+  // Sonido: un solo contexto de audio para la alarma y el DJ
   // -------------------------------------------------------------------------
   let ctx = null;
   let pads = null;
@@ -242,8 +248,48 @@ export function crearUtilidades(el, { leer, guardar, alTemporizador = () => {} }
     return pads;
   };
 
+  /**
+   * Llama a `fn` cuando el audio esté sonando de verdad. Un contexto recién creado tarda un
+   * momento en arrancar, y lo que se dispare antes se pierde: por eso el primer toque no sonaba.
+   */
+  function cuandoSuene(fn) {
+    const c = audio();
+    if (!c) return;
+    if (c.state === 'running') return void fn();
+    let hecho = false;
+    const listo = () => {
+      if (hecho || c.state !== 'running') return;
+      hecho = true;
+      c.removeEventListener('statechange', listo);
+      fn();
+    };
+    c.addEventListener('statechange', listo);
+    c.resume().then(listo, () => {});
+  }
+
+  // Mientras hace falta (el DJ abierto, o un temporizador a punto de acabar) suena un tono
+  // inaudible: mantiene despierta la salida de audio, que si se duerme tarda en volver a sonar.
+  let vigilia = null;
+  const motivos = new Set();
+  function despierto(motivo, si) {
+    if (si) motivos.add(motivo);
+    else motivos.delete(motivo);
+    if (motivos.size && !vigilia && ctx) {
+      const oscilador = ctx.createOscillator();
+      const ganancia = ctx.createGain();
+      oscilador.frequency.value = 30;
+      ganancia.gain.value = 0.0004;
+      oscilador.connect(ganancia).connect(ctx.destination);
+      oscilador.start();
+      vigilia = oscilador;
+    } else if (!motivos.size && vigilia) {
+      vigilia.stop();
+      vigilia = null;
+    }
+  }
+
   function pitido(hz, cuando, dura, nivel = 0.5) {
-    if (!ctx || ctx.state !== 'running') return;
+    if (!ctx) return null;
     const oscilador = ctx.createOscillator();
     const ganancia = ctx.createGain();
     oscilador.type = 'triangle';
@@ -255,6 +301,7 @@ export function crearUtilidades(el, { leer, guardar, alTemporizador = () => {} }
     oscilador.connect(ganancia).connect(ctx.destination);
     oscilador.start(cuando);
     oscilador.stop(cuando + dura + 0.02);
+    return oscilador;
   }
 
   // -------------------------------------------------------------------------
@@ -274,6 +321,7 @@ export function crearUtilidades(el, { leer, guardar, alTemporizador = () => {} }
       seccion.hidden = !actual || seccion.dataset.herramienta !== actual.id;
     });
     if (actual) $('.util-nombre').textContent = actual.nombre;
+    cuidarDj();
     pintarEstados();
     if (!actual) return;
     if (actual.id === 'ruleta') pintarRuleta();
@@ -291,7 +339,6 @@ export function crearUtilidades(el, { leer, guardar, alTemporizador = () => {} }
       temporizador: pref.temporizador ? (pref.temporizador.fin ? textoCuenta(pref.temporizador.fin - Date.now()) : 'En pausa') : '',
       cronometro: pref.cronometro.desde != null ? 'Corriendo' : '',
       radio: radioSonando ? 'Sonando' : '',
-      launchpad: pads && pads.baseSonando() ? 'Base sonando' : '',
     };
     el.querySelectorAll('[data-estado]').forEach((marca) => {
       const texto = estados[marca.dataset.estado] || '';
@@ -522,9 +569,41 @@ export function crearUtilidades(el, { leer, guardar, alTemporizador = () => {} }
 
   const restaTemporizador = () => (!pref.temporizador ? 0 : pref.temporizador.fin ? pref.temporizador.fin - Date.now() : pref.temporizador.resta);
 
+  // La alarma se deja programada en el reloj del audio unos segundos antes del final: así
+  // suena en el instante exacto, sin esperar a que la página se entere de que acabó.
+  let anticipo = null; // { fin, notas: [osciladores] }
+  function quitarAnticipo() {
+    if (anticipo) {
+      for (const nota of anticipo.notas) {
+        try {
+          nota.stop();
+        } catch {
+          // ya había sonado
+        }
+      }
+    }
+    anticipo = null;
+    despierto('temporizador', false);
+  }
+  const TANDA = [0, 0.22, 0.44];
+  const sonarTanda = (cuando) => TANDA.map((d) => pitido(1175, cuando + d, 0.16, 0.7)).filter(Boolean);
+
+  function anticiparAlarma() {
+    const fin = pref.temporizador && pref.temporizador.fin;
+    if (!fin || (anticipo && anticipo.fin === fin)) return;
+    const falta = (fin - Date.now()) / 1000;
+    if (falta > 5 || falta <= 0.05) return;
+    quitarAnticipo();
+    const c = audio();
+    if (!c || c.state !== 'running') return; // sin audio listo: sonará al terminar, apenas se pueda
+    despierto('temporizador', true);
+    anticipo = { fin, notas: sonarTanda(c.currentTime + falta) };
+  }
+
   function ponerTemporizador(ms) {
     audio(); // el toque que lo pone deja listo el sonido de la alarma
     callarAlarma();
+    quitarAnticipo();
     if (ms <= 0) pref.temporizador = null;
     else pref.temporizador = { fin: Date.now() + ms };
     totalTemporizador = Math.max(ms, 0);
@@ -532,23 +611,24 @@ export function crearUtilidades(el, { leer, guardar, alTemporizador = () => {} }
     pintarTemporizador();
   }
 
-  function sonarAlarma() {
+  /** `yaSono`: la primera tanda ya estaba programada y sonó sola al llegar a cero. */
+  function sonarAlarma(yaSono) {
     callarAlarma();
+    despierto('alarma', true);
     let veces = 0;
     const tanda = () => {
-      if (ctx && ctx.state === 'running') {
-        const t = ctx.currentTime + 0.02;
-        [0, 0.22, 0.44].forEach((d) => pitido(1175, t + d, 0.16, 0.7));
-      }
+      cuandoSuene(() => sonarTanda(ctx.currentTime + 0.01));
       veces += 1;
       if (veces >= 20) callarAlarma(); // medio minuto y se calla sola
     };
-    tanda();
+    if (yaSono) veces = 1;
+    else tanda();
     alarma = setInterval(tanda, 1500);
   }
   function callarAlarma() {
     if (alarma) clearInterval(alarma);
     alarma = null;
+    despierto('alarma', false);
   }
 
   let terminado = false;
@@ -623,8 +703,23 @@ export function crearUtilidades(el, { leer, guardar, alTemporizador = () => {} }
   }
 
   // -------------------------------------------------------------------------
-  // Launchpad
+  // DJ música (launchpad)
   // -------------------------------------------------------------------------
+  /**
+   * Al entrar al DJ se deja el audio listo y despierto (el toque que lo abre da el permiso);
+   * al salir —a otra herramienta, a la lista o a otra pestaña— se detiene la música.
+   */
+  function cuidarDj() {
+    const dentro = visible && pref.herramienta === 'launchpad';
+    if (dentro) {
+      losPads();
+      cuandoSuene(() => despierto('dj', visible && pref.herramienta === 'launchpad'));
+    } else {
+      if (pads && pads.baseSonando()) pads.base({ sonar: false });
+      despierto('dj', false);
+    }
+  }
+
   function pintarBase() {
     const sonando = Boolean(pads && pads.baseSonando());
     const boton = el.querySelector('[data-accion="base"]');
@@ -640,10 +735,13 @@ export function crearUtilidades(el, { leer, guardar, alTemporizador = () => {} }
     pad.addEventListener('pointerdown', (evento) => {
       evento.preventDefault();
       const p = losPads();
-      if (p) p.tocar(Number(pad.dataset.pad));
+      // si el audio aún no arrancó, el golpe suena apenas arranque (no se pierde)
+      if (p) cuandoSuene(() => p.tocar(Number(pad.dataset.pad)));
       pad.classList.add('tocado');
       setTimeout(() => pad.classList.remove('tocado'), 130);
     });
+    // en pantallas táctiles el navegador da el permiso de sonido al levantar el dedo
+    pad.addEventListener('pointerup', audio);
     pad.addEventListener('contextmenu', (evento) => evento.preventDefault());
   });
 
@@ -797,6 +895,7 @@ export function crearUtilidades(el, { leer, guardar, alTemporizador = () => {} }
         if (!pref.temporizador) break;
         audio();
         pref.temporizador = pref.temporizador.fin ? { resta: Math.max(0, pref.temporizador.fin - Date.now()) } : { fin: Date.now() + pref.temporizador.resta };
+        quitarAnticipo();
         recordar();
         pintarTemporizador();
         break;
@@ -839,9 +938,15 @@ export function crearUtilidades(el, { leer, guardar, alTemporizador = () => {} }
       }
       case 'base': {
         const p = losPads();
-        if (p) p.base({ sonar: !p.baseSonando(), bpm: pref.bpm, ritmo: pref.ritmo });
+        if (!p) break;
+        if (p.baseSonando()) p.base({ sonar: false });
+        else {
+          cuandoSuene(() => {
+            if (visible && pref.herramienta === 'launchpad' && !p.baseSonando()) p.base({ sonar: true, bpm: pref.bpm, ritmo: pref.ritmo });
+            pintarBase();
+          });
+        }
         pintarBase();
-        pintarEstados();
         break;
       }
       case 'radio':
@@ -870,12 +975,16 @@ export function crearUtilidades(el, { leer, guardar, alTemporizador = () => {} }
   // -------------------------------------------------------------------------
   setInterval(() => {
     if (pref.temporizador && pref.temporizador.fin && pref.temporizador.fin <= Date.now()) {
+      const yaSono = Boolean(anticipo && anticipo.fin === pref.temporizador.fin);
+      anticipo = null; // sus notas ya están sonando: no se cortan
+      despierto('temporizador', false);
       pref.temporizador = null;
       terminado = true;
       recordar();
-      sonarAlarma();
+      sonarAlarma(yaSono);
       pintarTemporizador();
     } else if (pref.temporizador || terminado) {
+      anticiparAlarma();
       pintarTemporizador();
     }
     if (!visible || document.hidden) return;
@@ -904,6 +1013,7 @@ export function crearUtilidades(el, { leer, guardar, alTemporizador = () => {} }
     mostrar(ver) {
       visible = ver;
       if (ver) pintar();
+      else cuidarDj(); // al salir de la pestaña, la música del DJ se detiene
       cuidarPantalla();
     },
     abrir,
