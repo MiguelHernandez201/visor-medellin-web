@@ -56,6 +56,14 @@ const CUADRO_MS = 450; // duración de cada cuadro de la animación del radar
 const PAUSA_ULTIMO_CUADRO = 6; // el cuadro más reciente se queda 6 cuadros más
 const RADIO_PLUVIOS_KM = 2.5; // pluviómetros que confirman o desmienten al radar
 
+// Navegación principal: el mapa primero; las tres listas de cámaras van juntas en «Ver cámaras».
+const NAVEGACION = [
+  { id: 'mapa', titulo: 'Mapa', icono: ICONOS.mapa },
+  { id: 'camaras', titulo: 'Ver cámaras', icono: ICONOS.camara },
+  { id: 'motor', titulo: 'Motor Tesla', icono: ICONOS.motor },
+];
+const LISTAS = ['simm', 'siata', 'rios']; // las subopciones de «Ver cámaras»
+
 const SECCIONES = [
   { id: 'simm', titulo: 'Tránsito', largo: 'Tránsito · SIMM', icono: ICONOS.transito },
   { id: 'siata', titulo: 'SIATA', largo: 'SIATA', icono: ICONOS.camara },
@@ -105,8 +113,17 @@ let camarasSimm = leerPreferencia('lista', null) || {
   numeros: Object.keys(CAMARAS_SIMM).map(Number).sort((a, b) => a - b),
 };
 const favoritas = new Set(leerPreferencia('favoritas', []));
-let seccion = leerPreferencia('seccion', 'simm');
-if (!SECCIONES.some((s) => s.id === seccion)) seccion = 'simm';
+// La app abre en el mapa. Quien venía de la versión anterior (que abría en Tránsito) pasa
+// al mapa una vez; después se recuerda la última sección, como siempre.
+if (leerPreferencia('inicioMapa', false) !== true) {
+  guardarPreferencia('inicioMapa', true);
+  guardarPreferencia('seccion', 'mapa');
+}
+let seccion = leerPreferencia('seccion', 'mapa');
+if (!SECCIONES.some((s) => s.id === seccion)) seccion = 'mapa';
+let listaCamaras = leerPreferencia('lista-camaras', 'simm'); // última subopción vista en «Ver cámaras»
+if (!LISTAS.includes(listaCamaras)) listaCamaras = 'simm';
+if (LISTAS.includes(seccion)) listaCamaras = seccion;
 const filtros = { favoritas: leerPreferencia('soloFavoritas', false), lluvia: false, alerta: false, texto: '' };
 let modoLluvia = leerPreferencia('modoLluvia', 'radar');
 if (!MODOS_LLUVIA.some((m) => m.id === modoLluvia)) modoLluvia = 'radar';
@@ -257,8 +274,8 @@ app.innerHTML = `
       <span class="marca-nombre">Visor Medellín</span>
     </div>
     <nav class="secciones" aria-label="Secciones">
-      ${SECCIONES.map(
-        (s) => `<button class="seccion" type="button" data-seccion="${s.id}">${s.icono}<span>${s.titulo}</span></button>`,
+      ${NAVEGACION.map(
+        (s) => `<button class="seccion" type="button" data-nav="${s.id}">${s.icono}<span>${s.titulo}</span></button>`,
       ).join('')}
     </nav>
     <div class="barra-derecha">
@@ -271,6 +288,9 @@ app.innerHTML = `
 
   <main class="contenido">
     <section class="vista-lista">
+      <div class="segmento subsecciones" role="group" aria-label="Cámaras">
+        ${LISTAS.map((id) => `<button type="button" data-seccion="${id}" aria-pressed="false">${SECCIONES.find((s) => s.id === id).titulo}</button>`).join('')}
+      </div>
       <div class="herramientas">
         <h1 class="titulo-seccion"></h1>
         <label class="busqueda">
@@ -405,6 +425,7 @@ const vistaListaEl = $('.vista-lista');
 const vistaMapaEl = $('.vista-mapa');
 const vistaMotorEl = $('.vista-motor');
 const tituloSeccionEl = $('.titulo-seccion');
+const subseccionesEl = $('.subsecciones');
 const busquedaEl = $('.busqueda input');
 const filtrosEl = $('.filtros');
 const resumenEl = $('.resumen-texto');
@@ -443,13 +464,19 @@ function cambiarSeccion(nueva) {
   if (!SECCIONES.some((s) => s.id === nueva)) return;
   seccion = nueva;
   guardarPreferencia('seccion', seccion);
+  if (LISTAS.includes(seccion)) {
+    listaCamaras = seccion;
+    guardarPreferencia('lista-camaras', listaCamaras);
+  }
   if (seccion !== 'rios') filtros.alerta = false;
   pintarSeccion();
 }
 
 function pintarSeccion() {
+  const enNav = LISTAS.includes(seccion) ? 'camaras' : seccion;
+  subseccionesEl.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.seccion === seccion)));
   seccionesEl.querySelectorAll('.seccion').forEach((b) => {
-    const activa = b.dataset.seccion === seccion;
+    const activa = b.dataset.nav === enNav;
     b.classList.toggle('activa', activa);
     if (activa) b.setAttribute('aria-current', 'page');
     else b.removeAttribute('aria-current');
@@ -478,6 +505,11 @@ function pintarSeccion() {
 
 seccionesEl.addEventListener('click', (evento) => {
   const boton = evento.target.closest('.seccion');
+  if (boton) cambiarSeccion(boton.dataset.nav === 'camaras' ? listaCamaras : boton.dataset.nav);
+});
+
+subseccionesEl.addEventListener('click', (evento) => {
+  const boton = evento.target.closest('[data-seccion]');
   if (boton) cambiarSeccion(boton.dataset.seccion);
 });
 
@@ -1466,8 +1498,9 @@ document.addEventListener('keydown', (evento) => {
   } else if (evento.key === '/' && seccion !== 'mapa' && seccion !== 'motor') {
     evento.preventDefault();
     busquedaEl.focus();
-  } else if (/^[1-5]$/.test(evento.key)) {
-    cambiarSeccion(SECCIONES[Number(evento.key) - 1].id);
+  } else if (/^[1-3]$/.test(evento.key)) {
+    const destinoNav = NAVEGACION[Number(evento.key) - 1].id;
+    cambiarSeccion(destinoNav === 'camaras' ? listaCamaras : destinoNav);
   }
 });
 document.addEventListener('keyup', (evento) => {
