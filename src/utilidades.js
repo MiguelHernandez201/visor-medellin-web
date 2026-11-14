@@ -8,11 +8,16 @@ import { crearBromas } from './bromas.js';
 import { crearSpotify } from './spotify.js';
 import { crearFutbol } from './futbol.js';
 
-const RADIO = {
-  nombre: 'La Mega',
-  detalle: 'RCN Radio · Medellín',
-  url: 'https://us-b4-p-e-qg12-audio.cdn.mdstrm.com/live-audio-aw/632cb48f613bac0856b931ab',
-};
+// Emisoras en vivo. Las de deportes narran los partidos de la Liga (Nacional, Medellín…).
+// Radio Nacional solo transmite en HLS: aparece solo en Safari (Mac, iPhone), que lo reproduce.
+const EMISORAS = [
+  { id: 'mega', nombre: 'La Mega', detalle: 'RCN Radio · Medellín · 92.9 FM', grupo: 'musica', url: 'https://us-b4-p-e-qg12-audio.cdn.mdstrm.com/live-audio-aw/632cb48f613bac0856b931ab' },
+  { id: 'antena2', nombre: 'Antena 2', detalle: 'Deportes RCN · narración de la Liga', grupo: 'deportes', url: 'https://us-b4-p-e-qg12-audio.cdn.mdstrm.com/live-audio-aw/69a9e92dcc2b7cec9dcad2c3' },
+  { id: 'caracol', nombre: 'Caracol Radio Medellín', detalle: 'Noticias y fútbol · 750 AM', grupo: 'deportes', url: 'https://playerservices.streamtheworld.com/api/livestream-redirect/CR_MEDELLINAAC.aac' },
+  { id: 'blu', nombre: 'Blu Radio Medellín', detalle: 'Noticias y deportes · 97.9 FM', grupo: 'deportes', url: 'https://playerservices.streamtheworld.com/api/livestream-redirect/BLU_MEDELLIN_ADP.aac' },
+  { id: 'nacional', nombre: 'Radio Nacional', detalle: 'RTVC · transmite partidos de la Liga', grupo: 'deportes', url: 'https://streaming.rtvc.gov.co/Radio_Radionacional/Radionacional.stream/playlist.m3u8', hls: true },
+  // Chrome dice que «quizá» reproduce HLS pero en la práctica falla: solo en Safari (Apple)
+].filter((e) => !e.hls || (/Apple/.test(navigator.vendor) && document.createElement('audio').canPlayType('application/vnd.apple.mpegurl')));
 
 const HERRAMIENTAS = [
   { id: 'moneda', nombre: 'Lanzar moneda', detalle: 'Cara o cruz', emoji: '🪙' },
@@ -22,7 +27,7 @@ const HERRAMIENTAS = [
   { id: 'cronometro', nombre: 'Cronómetro', detalle: 'Con vueltas', emoji: '⏱️' },
   { id: 'reloj', nombre: 'Reloj gigante', detalle: 'Con modo noche', emoji: '🕒' },
   { id: 'launchpad', nombre: 'DJ música', detalle: 'Pads y ritmos para tocar', emoji: '🎛️' },
-  { id: 'radio', nombre: 'Radio', detalle: RADIO.nombre, emoji: '📻' },
+  { id: 'radio', nombre: 'Radio', detalle: 'La Mega y el fútbol en vivo', emoji: '📻' },
   { id: 'spotify', nombre: 'Spotify', detalle: 'Tu música, junto con la voz de la app', emoji: '🎧' },
   { id: 'futbol', nombre: 'Fútbol', detalle: 'Liga colombiana: en vivo y tabla', emoji: '⚽' },
   { id: 'bromas', nombre: 'Bromas', detalle: '¿Quién fue?, mentiras y choque', emoji: '😈' },
@@ -80,6 +85,7 @@ export function crearUtilidades(el, { leer, guardar, alTemporizador = () => {}, 
     hasta: 100,
     noche: false,
     volumen: 80,
+    emisora: 'mega',
     bpm: 95,
     ritmo: RITMOS[0].id,
     temporizador: null, // { fin } corriendo | { resta } en pausa
@@ -236,11 +242,18 @@ export function crearUtilidades(el, { leer, guardar, alTemporizador = () => {}, 
         <section class="util-herramienta" data-herramienta="radio">
           <div class="radio-caja">
             <span class="util-emoji" aria-hidden="true">📻</span>
-            <h2>${RADIO.nombre}</h2>
-            <p class="secundario">${RADIO.detalle}</p>
+            <h2 class="radio-nombre"></h2>
+            <p class="secundario radio-detalle"></p>
             <button class="boton boton-principal util-grande" type="button" data-accion="radio" aria-pressed="false">▶ Escuchar</button>
             <p class="util-resultado radio-estado" aria-live="polite"></p>
             <label class="radio-volumen"><span>Volumen</span><input type="range" name="volumen" min="0" max="100" step="1"></label>
+          </div>
+          <div class="radio-emisoras">
+            <h3>Música</h3>
+            <div class="util-fila">${EMISORAS.filter((e) => e.grupo === 'musica').map((e) => `<button class="boton" type="button" data-emisora="${e.id}">${e.nombre}</button>`).join('')}</div>
+            <h3>⚽ Fútbol y deportes</h3>
+            <div class="util-fila">${EMISORAS.filter((e) => e.grupo === 'deportes').map((e) => `<button class="boton" type="button" data-emisora="${e.id}">${e.nombre}</button>`).join('')}</div>
+            <p class="secundario">Las de deportes narran los partidos de la Liga cuando hay fecha; cada emisora elige qué partido transmite.</p>
           </div>
           <p class="secundario">Es la transmisión en vivo de la emisora; gasta datos mientras suena. Sigue sonando al cambiar de pestaña.</p>
         </section>
@@ -351,7 +364,15 @@ export function crearUtilidades(el, { leer, guardar, alTemporizador = () => {}, 
   const spotify = crearSpotify($('.spotify-caja'));
 
   // Fútbol (futbol.js): Liga colombiana
-  const futbol = crearFutbol($('.futbol-caja'), { leer, guardar });
+  const futbol = crearFutbol($('.futbol-caja'), {
+    leer,
+    guardar,
+    // «Escuchar en la radio»: abre la radio con Antena 2 sonando (el toque da el permiso de sonar)
+    escucharRadio: () => {
+      elegirEmisora(EMISORAS.find((e) => e.id === pref.emisora && e.grupo === 'deportes') ? pref.emisora : 'antena2', true);
+      abrir('radio');
+    },
+  });
 
   // Bromas (bromas.js): usan el mismo contexto de audio
   const bromas = crearBromas($('.bromas'), { sonar: (fn) => cuandoSuene(() => fn(ctx)), velocidad: velocidadGps });
@@ -834,11 +855,30 @@ export function crearUtilidades(el, { leer, guardar, alTemporizador = () => {}, 
   // -------------------------------------------------------------------------
   // Radio
   // -------------------------------------------------------------------------
+  /** Cambia de emisora; si estaba sonando, pasa a la nueva sin pausa. `sonar`: arrancarla ya. */
+  function elegirEmisora(id, sonar = false) {
+    if (!EMISORAS.some((e) => e.id === id)) return;
+    const cambia = pref.emisora !== id;
+    pref.emisora = id;
+    recordar();
+    if (radioSonando && cambia) {
+      alternarRadio(); // la detiene…
+      alternarRadio(); // …y la arranca con la emisora nueva
+    } else if (sonar && !radioSonando) alternarRadio();
+    pintarRadio();
+  }
+
   let radio = null; // <audio>
   let radioSonando = false;
   let radioEstado = '';
 
+  const emisoraActual = () => EMISORAS.find((e) => e.id === pref.emisora) || EMISORAS[0];
+
   function pintarRadio() {
+    const emisora = emisoraActual();
+    $('.radio-nombre').textContent = emisora.nombre;
+    $('.radio-detalle').textContent = emisora.detalle;
+    el.querySelectorAll('[data-emisora]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.emisora === emisora.id)));
     const boton = el.querySelector('[data-accion="radio"]');
     boton.textContent = radioSonando ? '■ Detener' : '▶ Escuchar';
     boton.setAttribute('aria-pressed', String(radioSonando));
@@ -880,7 +920,7 @@ export function crearUtilidades(el, { leer, guardar, alTemporizador = () => {}, 
     radioSonando = true;
     radioEstado = 'Conectando…';
     radio.volume = pref.volumen / 100;
-    radio.src = RADIO.url;
+    radio.src = emisoraActual().url;
     radio.play().catch(() => {
       if (!radioSonando) return;
       radioSonando = false;
@@ -888,7 +928,7 @@ export function crearUtilidades(el, { leer, guardar, alTemporizador = () => {}, 
       pintarRadio();
     });
     if (navigator.mediaSession && window.MediaMetadata) {
-      navigator.mediaSession.metadata = new MediaMetadata({ title: RADIO.nombre, artist: RADIO.detalle });
+      navigator.mediaSession.metadata = new MediaMetadata({ title: emisoraActual().nombre, artist: emisoraActual().detalle });
     }
     pintarRadio();
     pintarEstados();
@@ -939,6 +979,9 @@ export function crearUtilidades(el, { leer, guardar, alTemporizador = () => {}, 
       if (pads) pads.base({ ritmo: pref.ritmo });
       return void pintarBase();
     }
+
+    const emisora = objetivo.closest('[data-emisora]');
+    if (emisora) return void elegirEmisora(emisora.dataset.emisora);
 
     const accion = objetivo.closest('[data-accion]');
     if (!accion) return;

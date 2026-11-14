@@ -3474,6 +3474,27 @@ body.en-mapa .contenido {
   gap: 12px;
 }
 
+.radio-emisoras {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  width: min(100%, 560px);
+}
+
+.radio-emisoras h3 {
+  margin: 6px 0 0;
+  font-size: 0.95rem;
+}
+
+.radio-emisoras .secundario {
+  margin: 0;
+}
+
+.radio-emisoras .boton[aria-pressed="true"] {
+  border-color: var(--acento);
+  background: var(--acento-tenue);
+}
+
 @media (max-width: 1100px) {
   .herramientas {
     grid-template-columns: auto 1fr;

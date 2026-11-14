@@ -50,8 +50,11 @@ function leerPartido(evento) {
 const hora = (fecha) => fecha.toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Bogota' });
 const dia = (fecha) => fecha.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'America/Bogota' });
 
-/** Monta la herramienta en `el`. `leer` y `guardar` son las preferencias. Devuelve { mostrar(visible) }. */
-export function crearFutbol(el, { leer, guardar }) {
+/**
+ * Monta la herramienta en `el`. `leer` y `guardar` son las preferencias; `escucharRadio()` abre la
+ * radio en una emisora que narra los partidos. Devuelve { mostrar(visible) }.
+ */
+export function crearFutbol(el, { leer, guardar, escucharRadio = null }) {
   const pref = { vista: 'fecha', equipo: '5264', goles: false, ...leer('futbol', {}) };
   const recordar = () => guardar('futbol', pref);
   let visible = false;
@@ -76,6 +79,7 @@ export function crearFutbol(el, { leer, guardar }) {
         <button class="boton" type="button" data-vista="equipo">Mi equipo</button>
       </div>
       <div class="futbol-cuerpo"></div>
+      ${escucharRadio ? '<button class="boton boton-principal futbol-radio" type="button">📻 Escuchar los partidos en la radio</button>' : ''}
       <label class="futbol-goles"><input type="checkbox" name="goles"><span>Avisar con voz los goles de mi equipo (con la app abierta)</span></label>
       <p class="secundario futbol-pie"></p>
     </div>`;
@@ -208,6 +212,7 @@ export function crearFutbol(el, { leer, guardar }) {
   }
 
   el.addEventListener('click', (evento) => {
+    if (escucharRadio && evento.target.closest('.futbol-radio')) return void escucharRadio();
     const vista = evento.target.closest('[data-vista]');
     if (!vista) return;
     pref.vista = vista.dataset.vista;
