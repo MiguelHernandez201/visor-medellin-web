@@ -25,7 +25,7 @@ Versión web del [Visor Medellín para LG webOS TV](https://github.com/MiguelHer
 - **Rumbo arriba**: mientras el mapa sigue al carro, gira con él para que la vía quede hacia arriba, como en un navegador. La brújula (junto a la flecha) lo cambia a norte arriba. Al arrastrar el mapa o al ir a tocar un destino vuelve al norte arriba. Los nombres de las calles son parte de la imagen del mapa, así que giran con él.
 - **Destinos guardados**: Casa, Trabajo y los seis últimos destinos quedan a un toque en el panel de rutas (se guardan solo en este navegador).
 - **Lluvia en la ruta**: el resumen dice si llueve en el recorrido según el radar (qué tan fuerte, dónde empieza y cuánto tramo) y lo repite la guía al manejar.
-- **Cargadores para carros eléctricos**: capa del mapa con los cargadores públicos, cada uno con el color de su red (Terpel Voltex, Celsia, EPM, Enel X, Evsy, Tesla, centros comerciales y otras). Al tocar uno se ven la red, los conectores, la potencia y los puestos que estén registrados, y un botón **Ir aquí** que traza la ruta. También se pueden buscar por nombre o red, y el panel de rutas ofrece **Ir al cargador más cercano**. Los datos son de [OpenStreetMap](https://www.openstreetmap.org/copyright) (voluntarios; pueden faltar cargadores o detalles): el relevo los lee una vez al día. No muestra disponibilidad ni precios en vivo.
+- **Cargadores para carros eléctricos**: capa del mapa con los cargadores públicos, cada uno con el color de su red (Terpel Voltex, Celsia, EPM, Enel X, Evsy, Tesla, centros comerciales y otras). Al tocar uno se ven la red, los conectores, la potencia y los puestos que estén registrados, y un botón **Ir aquí** que traza la ruta. También se pueden buscar por nombre o red, y el panel de rutas ofrece **Ir al cargador más cercano**. Los datos son de [OpenStreetMap](https://www.openstreetmap.org/copyright) y [Open Charge Map](https://openchargemap.org) (CC BY 4.0), que mantienen voluntarios y en los que pueden faltar cargadores o detalles: el relevo los lee una vez al día y junta los que son el mismo. No muestra disponibilidad ni precios en vivo.
 - **Motor**: sonido de motor de gasolina para un carro eléctrico, generado en vivo (sin grabaciones) y que sigue la velocidad del GPS. Cinco motores (V8 americano, V8 deportivo, V12, bóxer 6 y 4 cilindros turbo), caja automática imaginaria con cambios, limitador y petardeo. **Prueba con pedales** (acelerador y freno, o ↑ ↓ en el teclado) y **Demostración** para oírlo sin moverse; **Acelerar en neutro** con el carro detenido. Ajustes: volumen, intensidad, carácter, petardeo, tono y volumen del silbido, km/h o mph y encender al abrir. La ubicación solo se usa para medir la velocidad y no sale del navegador. El motor sigue sonando al pasar a las otras secciones.
 - **Utilidades**: herramientas rápidas para tocar con el dedo. La moneda, los dados y la ruleta tienen su sonido (tintineo y rebotes, traqueteo, y chasquidos con una campanita al parar), generado en el navegador. **Lanzar moneda** (cara o cruz); **Ruleta** con listas propias que se guardan (dónde comer, quién conduce…) y que se gira con el dedo; **Dados** (de 1 a 6) y **número al azar** entre dos valores; **Temporizador** con atajos de 5, 10, 15, 30 y 45 minutos, que suena al terminar y muestra lo que falta en la barra de arriba desde cualquier pestaña; **Cronómetro** con vueltas; **Reloj gigante** con modo noche y pantalla completa; **DJ música**, 16 pads con sonidos generados en el navegador y una base de ritmo (dembow, house o rock) con tempo ajustable, que se detiene al salir del DJ; y **Radio** con la transmisión en vivo de La Mega. El temporizador, el cronómetro y la radio siguen andando al cambiar de pestaña.
 - **Clima y alertas**: temperatura del centro en la barra superior y franja roja si el SIATA tiene una alerta vigente.
@@ -62,7 +62,7 @@ La app del TV corre desde `file://` y puede leer cualquier sitio. En el navegado
 `.github/workflows/datos.yml` corre cada 5 minutos en GitHub Actions: `scripts/datos.mjs` descarga del geoportal los niveles, pluviómetros, estaciones meteorológicas, PM2.5, alertas y las series de 3 h de las ~50 estaciones que tienen cámara, y los publica en la rama **`datos`** (un solo commit que se reemplaza cada vez). La app los lee de `raw.githubusercontent.com/MiguelHernandez201/visor-medellin-web/datos/…`, que sí envía CORS.
 
 - El mismo relevo lee una vez al día las cámaras de fotodetección del servidor de mapas de la Alcaldía (`fotomultas.json`); si falla o llega algo raro, se conserva la lista anterior.
-- También una vez al día consulta en OpenStreetMap (Overpass) los cargadores de carros eléctricos de la zona (`cargadores.json`), con la misma regla: si falla, queda la lista anterior.
+- También una vez al día consulta los cargadores de carros eléctricos de la zona (`cargadores.json`) en OpenStreetMap (Overpass) y en Open Charge Map, y los junta. Open Charge Map necesita una clave, guardada como secreto `OPENCHARGEMAP_KEY` del repositorio; sin ella se usa solo OpenStreetMap. Si una fuente falla, se combina con lo último que esa fuente trajo.
 - Los datos llegan con **5 a 15 minutos de retraso** (GitHub no corre los flujos programados a la hora exacta, y raw.githubusercontent.com guarda 5 min en caché). En el TV llegan al minuto.
 - La API a veces responde sin los umbrales de riesgo de las estaciones: el relevo guarda los últimos que llegaron (`umbrales.json`) y los rellena.
 - Si una fuente falla, se conserva su archivo anterior; `estado.json` dice qué falló y cuándo se generó.
@@ -99,7 +99,7 @@ Para probar con datos locales: `npm run datos`, sirve la carpeta del proyecto y 
 | `src/ubicacion.js` | Posición, rumbo y velocidad del carro (GPS) para el mapa |
 | `src/rutas.js` | Búsqueda de lugares (Photon), ruta en carro (OSRM), indicaciones en español y seguimiento de la ruta |
 | `src/moteles.js` | Moteles (OpenStreetMap) |
-| `src/cargadores.js`, `src/redes-carga.js` | Cargadores de carros eléctricos (OpenStreetMap) y las redes que se distinguen |
+| `src/cargadores.js`, `src/redes-carga.js` | Cargadores de carros eléctricos (OpenStreetMap y Open Charge Map) y las redes que se distinguen |
 | `src/utilidades.js` | Sección Utilidades: moneda, ruleta, dados, temporizador, cronómetro, reloj y radio |
 | `src/efectos.js` | Sonidos de la moneda, los dados y la ruleta (Web Audio) |
 | `src/pads.js` | DJ música: sonidos de los pads y base de ritmo (Web Audio) |
@@ -116,7 +116,7 @@ Para probar con datos locales: `npm run datos`, sirve la carpeta del proyecto y 
 | `src/grafica.js` | Gráfica del nivel de un río |
 | `public/` | Página, manifiesto, service worker e íconos |
 | `scripts/construir.mjs` | Construcción de `dist/` |
-| `scripts/datos.mjs` | Relevo de datos del SIATA |
+| `scripts/datos.mjs` | Relevo de datos (SIATA, fotomultas, cargadores y moteles) |
 | `.github/workflows/` | Publicación en Pages y relevo cada 5 min |
 
 ### Si no aparecen las cámaras del SIMM

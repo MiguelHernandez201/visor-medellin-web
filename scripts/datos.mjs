@@ -1,4 +1,5 @@
-// Relevo de datos del SIATA para la PWA (npm run datos; lo corre GitHub Actions cada 5 min).
+// Relevo de datos para la PWA (npm run datos; lo corre GitHub Actions cada 5 min): SIATA,
+// fotomultas, cargadores y moteles.
 //
 // La API del geoportal del SIATA (geoportal.siata.gov.co/fastgeoapi) no envía CORS, así que
 // un navegador no la puede leer desde otra página. Este script la descarga y deja los JSON en
@@ -13,7 +14,7 @@
 //   datos/series/<cód>.json   nivel de las últimas 3 h de las estaciones que tienen cámara
 //   datos/umbrales.json       últimos umbrales conocidos de cada estación (cm)
 //   datos/fotomultas.json     cámaras de fotodetección de la Alcaldía (se renueva una vez al día)
-//   datos/cargadores.json     cargadores de carros eléctricos, de OpenStreetMap (una vez al día)
+//   datos/cargadores.json     cargadores de carros eléctricos, de OpenStreetMap y Open Charge Map (una vez al día)
 //   datos/moteles.json        moteles, de OpenStreetMap (en la misma consulta)
 //   datos/estado.json         cuándo se generó y qué falló
 //
@@ -276,13 +277,117 @@ function leerMoteles(json) {
   return lista;
 }
 
+// Open Charge Map: trae redes que OpenStreetMap no tiene etiquetadas (Celsia, EPM, Tesla…).
+// Necesita una clave (secreto OPENCHARGEMAP_KEY en GitHub); sin ella se usa solo OpenStreetMap.
+const OCM = 'https://api.openchargemap.io/v3/poi/';
+const OCM_CAJA = '(6.55,-75.75),(5.95,-75.25)'; // la misma zona de la consulta a Overpass
+const OCM_CONECTORES = {
+  1: 'Tipo 1',
+  2: 'CHAdeMO',
+  25: 'Tipo 2',
+  1036: 'Tipo 2',
+  32: 'CCS1',
+  33: 'CCS2',
+  27: 'Tesla',
+  30: 'Tesla',
+  28: 'Enchufe común',
+  22: 'Enchufe común',
+  9: 'Enchufe común',
+  1038: 'GB/T',
+  1039: 'GB/T',
+  1040: 'GB/T rápido',
+};
+const OCM_PRIVADO = [2, 3, 6]; // UsageType: privado, o solo para clientes con aviso
+const OCM_FUERA = [100, 150, 200, 210]; // StatusType: no funciona, planeado, retirado, duplicado
+const OCM_OPERADORES = { 23: 'Tesla', 3304: 'Celsia', 3705: 'Terpel Voltex' }; // el 1 es «desconocido»
+
+function leerOpenChargeMap(json) {
+  const limpio = (texto) => String(texto || '').replace(/\s+/g, ' ').trim();
+  const lista = [];
+  for (const p of Array.isArray(json) ? json : []) {
+    const a = p.AddressInfo || {};
+    if (typeof a.Latitude !== 'number' || typeof a.Longitude !== 'number') continue;
+    if (OCM_PRIVADO.includes(p.UsageTypeID) || OCM_FUERA.includes(p.StatusTypeID)) continue;
+    const conexiones = (p.Connections || []).filter((c) => !OCM_FUERA.includes(c.StatusTypeID));
+    const kw = Math.max(0, ...conexiones.map((c) => (c.PowerKW > 0 && c.PowerKW <= 500 ? c.PowerKW : 0)));
+    const operador = OCM_OPERADORES[p.OperatorID] || '';
+    const nombre = limpio(a.Title).replace(/^(punto|estaci[oó]n) de carga\s+/i, '') || operador || 'Cargador';
+    const costo = limpio(p.UsageCost);
+    lista.push({
+      id: `C${p.ID}`,
+      nombre,
+      red: redDe(nombre, operador, a.AddressLine2),
+      operador,
+      direccion: limpio([a.AddressLine1, a.Town].filter(Boolean).join(', ')),
+      latitud: Math.round(a.Latitude * 1e5) / 1e5,
+      longitud: Math.round(a.Longitude * 1e5) / 1e5,
+      conectores: [...new Set(conexiones.map((c) => OCM_CONECTORES[c.ConnectionTypeID]).filter(Boolean))],
+      kw: kw ? Math.round(kw * 10) / 10 : null,
+      plazas: p.NumberOfPoints > 0 ? p.NumberOfPoints : null,
+      pago: /gratis|free|sin costo|^0\b/i.test(costo) ? false : costo || p.UsageTypeID === 5 ? true : null,
+      horario: '',
+    });
+  }
+  return lista;
+}
+
+/** Metros entre dos puntos (aproximación plana, de sobra para unos cientos de metros). */
+const metros = (a, b) =>
+  Math.hypot((a.latitud - b.latitud) * 111320, (a.longitud - b.longitud) * 111320 * Math.cos((a.latitud * Math.PI) / 180));
+
+const GENERICAS = ['otra', 'comercial']; // redes que no dicen quién opera el cargador
+/** Nombre sin la red ni palabras de relleno: «Terpel Voltex Autopista Norte» → «autopista norte». */
+const nombreBase = (texto) =>
+  texto
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/\b(terpel|voltex|celsia|epm|enel x?|evsy|tesla|supercharger|eds|estacion|cargador|de|del|la|el)\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+
+/**
+ * Junta las dos listas. Un cargador de Open Charge Map es el mismo que otro ya en la lista
+ * si está a menos de 150 m de uno de OpenStreetMap, a menos de 50 m de otro de Open Charge
+ * Map, o si es de la misma red con el mismo nombre a menos de 2 km (las dos fuentes a veces
+ * lo ubican distinto). Entonces se completa lo que le falte (red, conectores…).
+ */
+function combinarCargadores(osm, ocm) {
+  const lista = osm.map((c) => ({ ...c, conectores: [...c.conectores] }));
+  for (const c of ocm) {
+    const igual = lista.find((o) => {
+      const distancia = metros(o, c);
+      if (distancia < (o.id.startsWith('C') ? 50 : 150)) return true;
+      return distancia < 2000 && o.red === c.red && !GENERICAS.includes(c.red) && nombreBase(o.nombre) !== '' && nombreBase(o.nombre) === nombreBase(c.nombre);
+    });
+    if (!igual) {
+      lista.push(c);
+      continue;
+    }
+    if (GENERICAS.includes(igual.red) && !GENERICAS.includes(c.red)) igual.red = c.red;
+    else if (igual.red === 'otra') igual.red = c.red;
+    igual.operador ||= c.operador;
+    igual.direccion ||= c.direccion;
+    igual.conectores = [...new Set([...igual.conectores, ...c.conectores])];
+    igual.kw = Math.max(igual.kw || 0, c.kw || 0) || null;
+    igual.plazas ??= c.plazas;
+    igual.pago ??= c.pago;
+  }
+  return lista.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+}
+
+const pedirJson = (url, opciones) => fetch(url, opciones).then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))));
+const textoError = (motivo) => String((motivo && motivo.message) || motivo);
+
 const cargadoresAntes = leerJson('cargadores.json', null);
 const edadCargadores = cargadoresAntes && cargadoresAntes.leido ? (Date.now() - Date.parse(cargadoresAntes.leido)) / 3600000 : Infinity;
+const claveOcm = process.env.OPENCHARGEMAP_KEY;
 if (edadCargadores < 20) {
   estado.archivos['cargadores.json'] = { ok: true, cargadores: cargadoresAntes.cargadores.length, leido: cargadoresAntes.leido };
 } else {
-  try {
-    const respuesta = await fetch(OVERPASS, {
+  const leido = new Date().toISOString();
+  const [overpass, openCharge] = await Promise.allSettled([
+    pedirJson(OVERPASS, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -290,22 +395,51 @@ if (edadCargadores < 20) {
       },
       body: `data=${encodeURIComponent(CONSULTA)}`,
       signal: AbortSignal.timeout(70000),
-    });
-    if (!respuesta.ok) throw new Error(`HTTP ${respuesta.status}`);
-    const json = await respuesta.json();
-    const leido = new Date().toISOString();
-    const fuente = '© Colaboradores de OpenStreetMap (ODbL)';
-    const cargadores = leerCargadores(json);
-    const moteles = leerMoteles(json);
-    if (cargadores.length < 5 && moteles.length < 5) throw new Error(`respuesta rara (${cargadores.length} cargadores, ${moteles.length} moteles)`);
-    // `leido` marca la consulta: aunque una de las dos listas venga corta, no se repite hasta mañana
-    if (cargadores.length >= 5) guardar('cargadores.json', { leido, fuente, cargadores });
-    else guardar('cargadores.json', { ...(cargadoresAntes || { cargadores: [] }), leido });
-    if (moteles.length >= 5) guardar('moteles.json', { leido, fuente, moteles });
-    estado.archivos['cargadores.json'] = { ok: cargadores.length >= 5, cargadores: cargadores.length };
-    estado.archivos['moteles.json'] = { ok: moteles.length >= 5, moteles: moteles.length };
-  } catch (error) {
-    estado.archivos['cargadores.json'] = { ok: false, error: String(error.message || error) };
+    }),
+    claveOcm
+      ? pedirJson(`${OCM}?output=json&compact=true&verbose=false&maxresults=1000&boundingbox=${encodeURIComponent(OCM_CAJA)}`, {
+          headers: { 'X-API-Key': claveOcm, 'User-Agent': 'visor-medellin-web (relevo de datos)' },
+          signal: AbortSignal.timeout(40000),
+        })
+      : Promise.reject(new Error('sin clave OPENCHARGEMAP_KEY')),
+  ]);
+
+  // Lo último bueno de cada fuente se guarda aparte: si una falla, se combina la otra con
+  // lo que la que falló trajo la vez anterior.
+  const fuentes = { ...((cargadoresAntes && cargadoresAntes.fuentes) || {}) };
+  const errores = {};
+  let moteles = null;
+  if (overpass.status === 'fulfilled') {
+    const osm = leerCargadores(overpass.value);
+    moteles = leerMoteles(overpass.value);
+    if (osm.length >= 5) fuentes.osm = { leido, lista: osm };
+    else errores.osm = `respuesta rara (${osm.length} cargadores)`;
+  } else errores.osm = textoError(overpass.reason);
+  if (openCharge.status === 'fulfilled') {
+    const ocm = leerOpenChargeMap(openCharge.value);
+    if (ocm.length >= 3) fuentes.ocm = { leido, lista: ocm };
+    else errores.ocm = `respuesta rara (${ocm.length} cargadores)`;
+  } else errores.ocm = textoError(openCharge.reason);
+
+  // Una lista vieja sin `fuentes` (de antes de Open Charge Map) vale como la de OpenStreetMap
+  if (!fuentes.osm && cargadoresAntes && !cargadoresAntes.fuentes) fuentes.osm = { leido: cargadoresAntes.leido, lista: cargadoresAntes.cargadores || [] };
+  const cargadores = combinarCargadores((fuentes.osm && fuentes.osm.lista) || [], (fuentes.ocm && fuentes.ocm.lista) || []);
+  const fuente = ['© Colaboradores de OpenStreetMap (ODbL)', fuentes.ocm && 'Open Charge Map (CC BY 4.0)'].filter(Boolean).join(' · ');
+  // `leido` marca la consulta: aunque una fuente falle, no se repite hasta mañana
+  if (cargadores.length >= 5) guardar('cargadores.json', { leido, fuente, cargadores, fuentes });
+  else if (cargadoresAntes) guardar('cargadores.json', { ...cargadoresAntes, leido });
+  estado.archivos['cargadores.json'] = {
+    ok: cargadores.length >= 5 && !Object.keys(errores).length,
+    cargadores: cargadores.length,
+    openstreetmap: fuentes.osm ? fuentes.osm.lista.length : 0,
+    openchargemap: fuentes.ocm ? fuentes.ocm.lista.length : 0,
+    ...(Object.keys(errores).length ? { errores } : {}),
+  };
+  if (moteles && moteles.length >= 5) {
+    guardar('moteles.json', { leido, fuente: '© Colaboradores de OpenStreetMap (ODbL)', moteles });
+    estado.archivos['moteles.json'] = { ok: true, moteles: moteles.length };
+  } else {
+    estado.archivos['moteles.json'] = { ok: false, error: errores.osm || `respuesta rara (${moteles ? moteles.length : 0} moteles)` };
   }
 }
 

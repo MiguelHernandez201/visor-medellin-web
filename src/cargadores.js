@@ -1,7 +1,7 @@
 // Cargadores públicos para carros eléctricos (Terpel Voltex, Celsia, EPM, Enel X, Evsy, Tesla,
-// centros comerciales…). No hay un listado oficial que junte todas las redes: la fuente es
-// OpenStreetMap (amenity=charging_station), que mantienen voluntarios y puede estar incompleto
-// o desactualizado. El relevo de datos (scripts/datos.mjs) lo consulta una vez al día y deja
+// centros comerciales…). No hay un listado oficial que junte todas las redes: el relevo de datos
+// (scripts/datos.mjs) junta una vez al día OpenStreetMap (amenity=charging_station) y Open
+// Charge Map, que mantienen voluntarios y pueden estar incompletos o desactualizados, y deja
 // cargadores.json; la app lo toma de ahí. La lista de abajo (leída el 14 de noviembre de 2026,
 // solo nombre y lugar) es la de respaldo mientras el relevo no responda.
 // © Colaboradores de OpenStreetMap, licencia ODbL.

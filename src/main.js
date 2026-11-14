@@ -917,7 +917,7 @@ function pintarFiltros() {
         })
         .join('')}`,
     ).join('')}
-    <p class="secundario">Fotomultas: Alcaldía de Medellín. Cargadores y moteles: OpenStreetMap, puede faltar alguno.</p>`;
+    <p class="secundario">Fotomultas: Alcaldía de Medellín. Cargadores: OpenStreetMap y Open Charge Map. Moteles: OpenStreetMap. Puede faltar alguno.</p>`;
   if (html !== filtrosPintados) {
     filtrosPintados = html;
     filtrosMapaEl.innerHTML = html;

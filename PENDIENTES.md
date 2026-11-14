@@ -25,24 +25,31 @@ red). No hay ninguno etiquetado como Celsia, EPM, Enel X o Evsy.
 
 Opción recomendada: **Open Charge Map** (gratis, con clave).
 
-- [ ] Crear una cuenta en <https://openchargemap.org> y pedir una clave de API (*My Profile →
-      My Apps → Register an application*).
+- [x] Clave de API de Open Charge Map creada.
 - [ ] Guardarla en GitHub: repositorio → *Settings → Secrets and variables → Actions → New
-      repository secret*, con el nombre `OPENCHARGEMAP_KEY`.
-- [ ] Avisar para conectar el relevo (`scripts/datos.mjs`) a esa fuente y combinarla con
-      OpenStreetMap. La clave queda solo en GitHub; no llega a la página.
-- [ ] Revisar cuántos cargadores trae de cada red. Si aún faltan, queda armar la lista a mano
-      con los mapas de cada operador.
+      repository secret*, con el nombre `OPENCHARGEMAP_KEY`. La clave queda solo en GitHub;
+      no llega a la página.
+- [x] Relevo conectado: junta las dos fuentes. Probado en local el 14 de noviembre de 2026:
+      20 de OpenStreetMap + 17 de Open Charge Map = 30 cargadores (Voltex 5, EPM 6, Celsia 4,
+      Tesla 1, centro comercial 1, otras 13).
+- [ ] Siguen faltando Enel X y Evsy, y 13 quedan como «otra red». Si se quieren todos, queda
+      armar la lista a mano con los mapas de cada operador.
 
 ## 3. Comprobar el relevo diario
 
 El relevo (`.github/workflows/datos.yml`) lee una vez al día las fotomultas, los cargadores y
 los moteles. No se pudo probar en vivo desde aquí.
 
-- [ ] Tras fusionar, mirar en *Actions → Datos del SIATA* la salida de una corrida: en el
-      `estado` deben salir `fotomultas.json`, `cargadores.json` y `moteles.json` con `ok: true`.
-- [ ] Si `fotomultas.json` falla (el servidor de la Alcaldía a veces rechaza conexiones desde
-      fuera de Colombia), la app sigue con la lista incluida; habría que buscar otra vía.
+- [x] Revisado el 14 de noviembre de 2026: `cargadores.json` (20) y `moteles.json` (24) salen
+      con `ok: true` y la app los pinta en el mapa.
+- [ ] **El relevo no corre cada 5 minutos**: GitHub retrasa los cron de los repositorios
+      gratuitos y en la práctica corre cada 4 a 8 horas, así que la lluvia, los ríos y las
+      alertas llegan con horas de atraso. Opciones: dispararlo desde fuera (p. ej. cron-job.org
+      llamando a `workflow_dispatch` con un token de solo Actions) o mover el relevo a un
+      servicio con cron real (Cloudflare Workers, gratis).
+- [ ] `fotomultas.json` falla: el servidor de la Alcaldía responde 503 al relevo tanto desde
+      GitHub como desde un PC en Colombia (y 403 a curl): rechaza las peticiones automáticas.
+      La app sigue con la lista incluida; habría que pedir acceso o buscar otra vía.
 - [ ] Si `cargadores.json` o `moteles.json` fallan (Overpass saturado), se reintenta solo al
       día siguiente.
 
