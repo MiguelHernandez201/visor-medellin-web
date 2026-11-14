@@ -4,6 +4,7 @@
 // - la lluvia: el radar (o un cuadro de la animación) o el mapa de calor, en un <canvas>
 //   sobre el RECORTE del valle, y una gota en cada pluviómetro donde llueve.
 // - las cámaras de fotodetección (fotomultas), como señales con el límite de velocidad.
+// - el carro (flecha con el rumbo del GPS) y la ruta hasta un destino.
 // Fondo: teselas "World Dark Gray" de Esri (base y, encima de la lluvia, los nombres).
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -61,10 +62,11 @@ const CapaLienzo = L.Layer.extend({
 });
 
 /**
- * Crea el mapa en `contenedor`. Opciones: { vista: { centro, zoom }, alElegir(id), alMover(vista) }.
- * Devuelve { ponerCamaras, marcar, elegir, lluvia, fotomultas, invalidar }.
+ * Crea el mapa en `contenedor`. Opciones: { vista: { centro, zoom }, alElegir(id), alMover(vista),
+ * alTocar([lat, lon]): toque en el mapa, alArrastrar(): el usuario movió el mapa con el dedo }.
+ * Devuelve { ponerCamaras, marcar, elegir, lluvia, fotomultas, vehiculo, ruta, encuadrar, centro, invalidar }.
  */
-export function crearMapa(contenedor, { vista, alElegir, alMover }) {
+export function crearMapa(contenedor, { vista, alElegir, alMover, alTocar = () => {}, alArrastrar = () => {} }) {
   const mapa = L.map(contenedor, {
     center: vista.centro,
     zoom: vista.zoom,
@@ -85,6 +87,9 @@ export function crearMapa(contenedor, { vista, alElegir, alMover }) {
   panelNombres.style.pointerEvents = 'none';
   mapa.createPane('gotas').style.zIndex = 590;
   mapa.createPane('fotomultas').style.zIndex = 595; // debajo de las cámaras (600)
+  mapa.createPane('ruta').style.zIndex = 420; // sobre la lluvia y los nombres, bajo los puntos
+  mapa.createPane('vehiculo').style.zIndex = 640; // encima de todo lo demás
+  mapa.getPane('vehiculo').style.pointerEvents = 'none';
 
   L.tileLayer(`${ESRI}/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}`, {
     maxNativeZoom: 16,
@@ -105,6 +110,11 @@ export function crearMapa(contenedor, { vista, alElegir, alMover }) {
   const actualizarCifras = () => contenedor.classList.toggle('con-cifras', mapa.getZoom() >= 13);
   mapa.on('zoomend', actualizarCifras);
   actualizarCifras();
+  mapa.on('click', (evento) => alTocar([evento.latlng.lat, evento.latlng.lng]));
+  mapa.on('dragstart', alArrastrar);
+  // mientras hay zoom, el carro no se desliza (iría por detrás del mapa)
+  mapa.on('zoomstart', () => contenedor.classList.add('en-zoom'));
+  mapa.on('zoomend', () => contenedor.classList.remove('en-zoom'));
   mapa.on('moveend', () => {
     const c = mapa.getCenter();
     alMover({ centro: [c.lat, c.lng], zoom: mapa.getZoom() });
@@ -259,5 +269,92 @@ export function crearMapa(contenedor, { vista, alElegir, alMover }) {
     if (!mapa.hasLayer(capaFotomultas)) capaFotomultas.addTo(mapa);
   }
 
-  return { ponerCamaras, marcar, elegir, lluvia, fotomultas, invalidar: () => mapa.invalidateSize() };
+  // -------------------------------------------------------------------------
+  // El carro y la ruta
+  // -------------------------------------------------------------------------
+  let marcaVehiculo = null;
+  let circuloVehiculo = null;
+  let giroVehiculo = 0; // grados acumulados: así de 350° a 10° gira 20° y no da la vuelta entera
+
+  /**
+   * Pone el carro en el mapa. posicion = { latitud, longitud, precision, rumbo } o null para
+   * quitarlo. Con `seguir`, el mapa se centra en él (y se acerca la primera vez).
+   */
+  function vehiculo(posicion, seguir = false) {
+    if (!posicion) {
+      if (marcaVehiculo) marcaVehiculo.remove();
+      if (circuloVehiculo) circuloVehiculo.remove();
+      marcaVehiculo = null;
+      circuloVehiculo = null;
+      return;
+    }
+    const lugar = [posicion.latitud, posicion.longitud];
+    if (!marcaVehiculo) {
+      circuloVehiculo = L.circle(lugar, { pane: 'ruta', radius: 1, interactive: false, className: 'vehiculo-precision' }).addTo(mapa);
+      marcaVehiculo = L.marker(lugar, {
+        pane: 'vehiculo',
+        interactive: false,
+        keyboard: false,
+        icon: L.divIcon({
+          className: 'marcador vehiculo-marcador',
+          html: '<span class="vehiculo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5l7 17.5-7-4-7 4z"/></svg></span>',
+          iconSize: [0, 0],
+        }),
+      }).addTo(mapa);
+    } else {
+      marcaVehiculo.setLatLng(lugar);
+      circuloVehiculo.setLatLng(lugar);
+    }
+    circuloVehiculo.setRadius(Math.min(400, Math.max(5, posicion.precision || 0)));
+    const figura = marcaVehiculo.getElement().querySelector('.vehiculo');
+    figura.classList.toggle('sin-rumbo', posicion.rumbo == null);
+    if (posicion.rumbo != null) {
+      giroVehiculo += ((posicion.rumbo - giroVehiculo + 540) % 360) - 180;
+      figura.style.transform = `translate(-50%, -50%) rotate(${Math.round(giroVehiculo)}deg)`;
+    }
+    if (seguir) {
+      if (mapa.getZoom() < 15) mapa.setView(lugar, 16);
+      else mapa.panTo(lugar, { animate: true, duration: 1, easeLinearity: 1 });
+    }
+  }
+
+  let capaRuta = null;
+
+  /** Dibuja la ruta (puntos = [[lat, lon]]) y el destino ([lat, lon]); null quita cada uno. */
+  function ruta(puntos, destino) {
+    if (capaRuta) capaRuta.remove();
+    capaRuta = null;
+    if (!puntos && !destino) return;
+    capaRuta = L.layerGroup().addTo(mapa);
+    if (puntos) {
+      L.polyline(puntos, { pane: 'ruta', className: 'ruta-borde', interactive: false }).addTo(capaRuta);
+      L.polyline(puntos, { pane: 'ruta', className: 'ruta-linea', interactive: false }).addTo(capaRuta);
+    }
+    if (destino) {
+      L.marker(destino, {
+        pane: 'vehiculo',
+        interactive: false,
+        keyboard: false,
+        icon: L.divIcon({ className: 'marcador', html: '<span class="destino"></span>', iconSize: [0, 0] }),
+      }).addTo(capaRuta);
+    }
+  }
+
+  /** Acerca o aleja el mapa para que quepan todos los puntos [[lat, lon]]. */
+  function encuadrar(puntos) {
+    if (puntos && puntos.length) mapa.fitBounds(L.latLngBounds(puntos), { padding: [48, 48], maxZoom: 16 });
+  }
+
+  return {
+    ponerCamaras,
+    marcar,
+    elegir,
+    lluvia,
+    fotomultas,
+    vehiculo,
+    ruta,
+    encuadrar,
+    centro: () => [mapa.getCenter().lat, mapa.getCenter().lng],
+    invalidar: () => mapa.invalidateSize(),
+  };
 }

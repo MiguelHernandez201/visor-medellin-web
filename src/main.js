@@ -47,6 +47,8 @@ import { registrarServiceWorker, prepararInstalacion } from './pwa.js';
 import { crearMotor } from './motor.js';
 import { FOTOMULTAS } from './fotomultas.js';
 import { crearAvisos } from './avisos.js';
+import { crearUbicacion } from './ubicacion.js';
+import { buscarLugares, calcularRuta as calcularRutaOsrm, seguirRuta, fotomultasEnRuta, textoDistancia, textoDuracion } from './rutas.js';
 
 const RECORRIDO_MS = 15 * 1000; // cuánto se ve cada cámara en el recorrido
 const PRECARGA_MS = 4 * 1000; // antes de pasar a la siguiente, se pide su imagen
@@ -296,6 +298,11 @@ app.innerHTML = `
         </div>
         <button class="boton-fotomultas" type="button" aria-pressed="false" title="Cámaras de fotodetección de la Secretaría de Movilidad"><span class="fotomulta">60</span><span>Fotomultas</span></button>
         <button class="boton-aviso" type="button" aria-pressed="false" title="Suena al acercarte a una fotomulta (usa el GPS)">${ICONOS.campana}<span>Aviso sonoro</span></button>
+        <button class="boton-panel" type="button" aria-expanded="true"></button>
+        <button class="boton-ruta" type="button" aria-pressed="false" title="Buscar una ruta en carro">${ICONOS.ruta}<span>Ruta</span></button>
+        <button class="boton-icono boton-ubicar" type="button" aria-pressed="false" aria-label="Ver mi carro en el mapa" title="Ver mi carro en el mapa">${ICONOS.ubicar}</button>
+        <span class="nota-ubicacion" hidden></span>
+        <div class="guia" aria-live="polite" hidden></div>
         <div class="mapa-leyenda">
           <span class="mapa-leyenda-titulo"></span>
           <span class="escala"><span class="nivel-lluvia-1">Llovizna</span><span class="nivel-lluvia-2">Ligera</span><span class="nivel-lluvia-3">Moderada</span><span class="nivel-lluvia-4">Fuerte</span></span>
@@ -310,6 +317,20 @@ app.innerHTML = `
         </div>
       </div>
       <aside class="panel" aria-live="polite">
+        <div class="panel-ruta" hidden>
+          <div class="ruta-cabeza">
+            <h2>Ruta</h2>
+            <button class="boton-icono ruta-cerrar" type="button" aria-label="Cerrar">${ICONOS.cerrar}</button>
+          </div>
+          <form class="busqueda ruta-busqueda">
+            ${ICONOS.buscar}
+            <input type="search" placeholder="¿A dónde vas? Lugar o barrio" aria-label="Destino" autocomplete="off">
+          </form>
+          <button class="boton ruta-elegir" type="button">${ICONOS.destino}<span>Elegir el destino en el mapa</span></button>
+          <p class="ruta-estado" hidden></p>
+          <div class="ruta-contenido"></div>
+          <p class="secundario ruta-pie">Sale desde tu ubicación. Rutas de OSRM y lugares de Photon sobre OpenStreetMap: no tienen en cuenta el tráfico, el pico y placa ni los cierres.</p>
+        </div>
         <div class="panel-vacio">
           <p><strong>Toca una cámara en el mapa</strong> para ver su foto, la lluvia, el nivel del río y el clima en ese punto.</p>
           <p>Las cámaras van sin color: la forma dice de qué tipo son y el color solo aparece si llueve o un río está en alerta.</p>
@@ -395,6 +416,13 @@ const pieSimmEl = $('.pie-simm');
 const capasEl = $('.capas-lluvia');
 const botonFotomultasEl = $('.boton-fotomultas');
 const botonAvisoEl = $('.boton-aviso');
+const botonRutaEl = $('.boton-ruta');
+const botonPanelEl = $('.boton-panel');
+const botonUbicarEl = $('.boton-ubicar');
+const notaUbicacionEl = $('.nota-ubicacion');
+const guiaEl = $('.guia');
+const panelRutaEl = $('.panel-ruta');
+const rutaBusquedaEl = $('.ruta-busqueda input');
 const avisoFotomultaEl = $('.aviso-fotomulta');
 const leyendaTituloEl = $('.mapa-leyenda-titulo');
 const panelEl = $('.panel');
@@ -641,10 +669,26 @@ function asegurarMapa() {
     vista: vistaMapa,
     alElegir: elegirEnMapa,
     alMover: (vista) => guardarPreferencia('vistaMapa', vista),
+    alTocar: tocarMapa,
+    alArrastrar: () => {
+      if (!siguiendo) return;
+      siguiendo = false;
+      pintarUbicar();
+    },
   });
+  // el carro vuelve a verse si así quedó la última vez
+  if (leerPreferencia('verVehiculo', false)) activarUbicacion(true);
 }
 
 function elegirEnMapa(id) {
+  if (eligiendoDestino) {
+    // se está eligiendo destino: la cámara tocada lo es
+    const [latitud, longitud] = coordenadasCamara(id);
+    fijarDestino({ nombre: nombreCamara(id), detalle: `Cámara · ${detalleCamara(id)}`, latitud, longitud });
+    return;
+  }
+  rutaAbierta = false;
+  mostrarPanel(true);
   elegida = id;
   mapa.elegir(id);
   revisarFoto(id);
@@ -733,6 +777,27 @@ function pintarFotomultas() {
   $('.leyenda-fotomulta').hidden = !verFotomultas;
 }
 
+// El panel de la derecha del mapa se puede recoger para ver el mapa a todo lo ancho (se
+// recuerda). En el celular no aplica: allí el panel solo sale cuando hay algo que mostrar.
+let verPanel = leerPreferencia('panelMapa', true);
+
+function mostrarPanel(ver) {
+  if (ver !== verPanel) {
+    verPanel = ver;
+    guardarPreferencia('panelMapa', ver);
+  }
+  vistaMapaEl.classList.toggle('sin-panel', !ver);
+  botonPanelEl.innerHTML = ver ? ICONOS.siguiente : ICONOS.anterior;
+  botonPanelEl.setAttribute('aria-expanded', String(ver));
+  const texto = ver ? 'Ocultar el panel' : 'Mostrar el panel';
+  botonPanelEl.setAttribute('aria-label', texto);
+  botonPanelEl.title = texto;
+  if (mapa) requestAnimationFrame(() => mapa.invalidar()); // el mapa cambió de ancho
+}
+
+botonPanelEl.addEventListener('click', () => mostrarPanel(!verPanel));
+mostrarPanel(verPanel);
+
 // Aviso sonoro al acercarse a una fotomulta (avisos.js). La franja se ve en todas las pestañas.
 const avisos = crearAvisos({ camaras: FOTOMULTAS, alCambiar: pintarAviso });
 
@@ -764,6 +829,315 @@ botonAvisoEl.addEventListener('click', () => {
   avisos.activar(activar);
   if (activar) avisos.probar(); // suena una vez: así se sabe cómo es y a qué volumen
 });
+
+// ---------------------------------------------------------------------------
+// El carro en el mapa y las rutas (ubicacion.js, rutas.js)
+// ---------------------------------------------------------------------------
+let siguiendo = false; // el mapa se mueve con el carro
+let rutaAbierta = false; // el panel muestra la búsqueda de ruta
+let eligiendoDestino = false; // el próximo toque en el mapa es el destino
+let destino = null; // { nombre, detalle, latitud, longitud }
+let ruta = null; // la de rutas.js, más { fotomultas }
+let rutaEstado = ''; // aviso bajo el buscador
+let resultados = null; // lugares encontrados (null = no se ha buscado)
+let esperandoOrigen = false; // hay destino pero aún no se sabe dónde está el carro
+let llegada = false;
+let fueraDeRuta = 0; // lecturas seguidas lejos del trazado
+let ultimoCalculo = 0;
+let busquedaLugares = null;
+let calculoRuta = null;
+let esperaBusqueda = 0;
+
+const ubicacion = crearUbicacion(({ estado, posicion }) => {
+  if (mapa) mapa.vehiculo(posicion, siguiendo && seccion === 'mapa' && !visor);
+  pintarUbicar(estado, posicion);
+  if (!destino) return;
+  if (esperandoOrigen && (posicion || estado === 'denegada' || estado === 'sin-soporte')) calcularRuta();
+  else if (posicion && ruta) guiar(posicion);
+});
+
+function activarUbicacion(activar) {
+  guardarPreferencia('verVehiculo', activar);
+  if (!activar) siguiendo = false;
+  ubicacion.activar(activar);
+}
+
+function pintarUbicar(estado = ubicacion.estado(), posicion = ubicacion.posicion()) {
+  botonUbicarEl.setAttribute('aria-pressed', String(ubicacion.activa()));
+  botonUbicarEl.classList.toggle('siguiendo', siguiendo);
+  botonUbicarEl.setAttribute('aria-label', !ubicacion.activa() ? 'Ver mi carro en el mapa' : siguiendo ? 'Dejar de ver mi carro' : 'Centrar en mi carro');
+  let nota = '';
+  if (estado === 'pidiendo') nota = 'Buscando GPS…';
+  else if (estado === 'denegada') nota = 'Ubicación bloqueada: actívala en el candado de la barra de direcciones';
+  else if (estado === 'sin-soporte') nota = 'Este navegador no da la ubicación';
+  else if (estado === 'sin-senal' && !posicion) nota = 'Sin señal GPS';
+  else if (posicion) nota = `${Math.round(posicion.velocidad * 3.6)} km/h`;
+  if (notaUbicacionEl.textContent !== nota) notaUbicacionEl.textContent = nota;
+  notaUbicacionEl.hidden = !nota;
+}
+
+botonUbicarEl.addEventListener('click', () => {
+  if (!ubicacion.activa()) {
+    siguiendo = true;
+    activarUbicacion(true);
+  } else if (!siguiendo) {
+    siguiendo = true;
+    mapa.vehiculo(ubicacion.posicion(), true);
+    pintarUbicar();
+  } else activarUbicacion(false);
+});
+
+/** Lugares que coinciden con el texto: cámaras de la app y, después, los de Photon. */
+async function buscarDestino(texto) {
+  if (busquedaLugares) busquedaLugares.abort();
+  busquedaLugares = null;
+  if (texto.trim().length < 3) {
+    resultados = null;
+    rutaEstado = '';
+    pintarRuta();
+    return;
+  }
+  const buscado = normalizar(texto.trim());
+  const camaras = camarasDeSeccion('mapa')
+    .filter((id) => normalizar(`${nombreCamara(id)} ${detalleCamara(id)}`).includes(buscado))
+    .slice(0, 3)
+    .map((id) => {
+      const [latitud, longitud] = coordenadasCamara(id);
+      return { nombre: nombreCamara(id), detalle: `Cámara · ${detalleCamara(id)}`, latitud, longitud };
+    });
+  const control = new AbortController();
+  busquedaLugares = control;
+  rutaEstado = 'Buscando…';
+  pintarRuta();
+  let lugares = [];
+  let fallo = false;
+  try {
+    lugares = await buscarLugares(texto.trim(), mapa ? mapa.centro() : null, control.signal);
+  } catch (error) {
+    if (error.name === 'AbortError') return;
+    fallo = true;
+  }
+  if (busquedaLugares !== control) return;
+  busquedaLugares = null;
+  resultados = [...lugares, ...camaras];
+  rutaEstado = resultados.length ? '' : fallo ? 'No se pudo buscar. Revisa la conexión o elige el destino en el mapa.' : 'No encontré ese lugar. Prueba con otro nombre o elige el destino en el mapa.';
+  pintarRuta();
+}
+
+function fijarDestino(lugar) {
+  destino = lugar;
+  ruta = null;
+  resultados = null;
+  llegada = false;
+  eligiendoDestino = false;
+  rutaAbierta = true;
+  mostrarPanel(true);
+  rutaBusquedaEl.value = lugar.nombre;
+  mapa.ruta(null, [lugar.latitud, lugar.longitud]);
+  calcularRuta();
+}
+
+function quitarRuta() {
+  if (calculoRuta) calculoRuta.abort();
+  calculoRuta = null;
+  destino = null;
+  ruta = null;
+  resultados = null;
+  esperandoOrigen = false;
+  llegada = false;
+  rutaEstado = '';
+  rutaBusquedaEl.value = '';
+  if (mapa) mapa.ruta(null, null);
+  pintarPanel();
+}
+
+/** Calcula la ruta desde el carro hasta el destino. `recalculo`: el carro se salió del trazado. */
+async function calcularRuta(recalculo = false) {
+  if (!destino) return;
+  let origen = ubicacion.posicion();
+  let desdeCentro = false;
+  if (!origen) {
+    const estado = ubicacion.estado();
+    if (estado === 'denegada' || estado === 'sin-soporte') {
+      // sin GPS: la ruta sale del centro del mapa
+      const [latitud, longitud] = mapa.centro();
+      origen = { latitud, longitud };
+      desdeCentro = true;
+    } else {
+      esperandoOrigen = true;
+      rutaEstado = 'Buscando tu ubicación para trazar la ruta…';
+      if (!ubicacion.activa()) activarUbicacion(true);
+      pintarPanel();
+      return;
+    }
+  }
+  esperandoOrigen = false;
+  if (calculoRuta) calculoRuta.abort();
+  const control = new AbortController();
+  calculoRuta = control;
+  ultimoCalculo = Date.now();
+  fueraDeRuta = 0;
+  if (!recalculo) rutaEstado = 'Calculando la ruta…';
+  pintarPanel();
+  try {
+    const nueva = await calcularRutaOsrm([origen.latitud, origen.longitud], [destino.latitud, destino.longitud], control.signal);
+    if (calculoRuta !== control) return;
+    nueva.fotomultas = fotomultasEnRuta(nueva, FOTOMULTAS);
+    ruta = nueva;
+    rutaEstado = desdeCentro ? 'Sin GPS: la ruta sale del centro del mapa.' : '';
+    mapa.ruta(ruta.puntos, [destino.latitud, destino.longitud]);
+    if (!recalculo) {
+      siguiendo = false;
+      mapa.encuadrar(ruta.puntos);
+      pintarUbicar();
+    }
+  } catch (error) {
+    if (error.name === 'AbortError' || calculoRuta !== control) return;
+    if (!recalculo) {
+      ruta = null;
+      rutaEstado = error.sinRuta ? 'No hay ruta en carro hasta ese punto.' : 'No se pudo calcular la ruta. Revisa la conexión e inténtalo de nuevo.';
+    }
+  }
+  calculoRuta = null;
+  pintarPanel();
+  if (ruta && ubicacion.posicion()) guiar(ubicacion.posicion());
+}
+
+/** Con cada lectura del GPS: siguiente maniobra, lo que falta y recálculo si se salió. */
+function guiar(posicion) {
+  if (!ruta || llegada) return;
+  const avance = seguirRuta(ruta, [posicion.latitud, posicion.longitud]);
+  if (avance.restante < 35 && avance.fuera < 60) {
+    llegada = true;
+    pintarGuia(null);
+    return;
+  }
+  fueraDeRuta = avance.fuera > 70 && posicion.precision < 60 ? fueraDeRuta + 1 : 0;
+  if (fueraDeRuta >= 3 && Date.now() - ultimoCalculo > 8000 && !calculoRuta) calcularRuta(true);
+  pintarGuia(avance);
+}
+
+let guiaPintada = '';
+function pintarGuia(avance) {
+  let html = '';
+  if (eligiendoDestino) html = '<strong>Toca el mapa en tu destino</strong><button class="enlace" type="button" data-guia="cancelar">Cancelar</button>';
+  else if (llegada) html = '<strong>Llegaste a tu destino</strong><button class="enlace" type="button" data-guia="quitar">Quitar ruta</button>';
+  else if (ruta && avance) {
+    const fuera = fueraDeRuta >= 3 ? '<span class="guia-nota">Fuera de la ruta: recalculando…</span>' : '';
+    html = `<strong>En ${textoDistancia(avance.metrosAlPaso)} · ${escapar(avance.paso.texto)}</strong>
+      <span>Faltan ${textoDistancia(avance.restante)} · ${textoDuracion(avance.segundos)}</span>${fuera}`;
+  } else if (ruta) {
+    html = `<strong>${escapar(destino.nombre)}</strong><span>${textoDistancia(ruta.metros)} · ${textoDuracion(ruta.segundos)} sin tráfico</span>`;
+  }
+  if (html !== guiaPintada) {
+    guiaPintada = html;
+    guiaEl.innerHTML = html;
+  }
+  guiaEl.hidden = !html;
+  $('.mapa-caja').classList.toggle('con-guia', Boolean(html));
+}
+
+let rutaPintada = '';
+function pintarRuta() {
+  botonRutaEl.setAttribute('aria-pressed', String(rutaAbierta || Boolean(destino)));
+  $('.ruta-estado').textContent = rutaEstado;
+  $('.ruta-estado').hidden = !rutaEstado;
+  let html = '';
+  if (resultados) {
+    html = `<ul class="ruta-resultados">${resultados
+      .map((r, i) => `<li><button type="button" data-resultado="${i}"><strong>${escapar(r.nombre)}</strong><span>${escapar(r.detalle)}</span></button></li>`)
+      .join('')}</ul>`;
+  } else if (ruta) {
+    const camaras = ruta.fotomultas;
+    const fotos = camaras.length
+      ? `<p class="ruta-fotomultas"><span class="fotomulta">${camaras.length}</span><span>${camaras.length === 1 ? 'Una fotomulta' : `${camaras.length} fotomultas`} en la ruta: ${escapar(camaras.map((c) => `${c.camara.nombre} (${c.camara.limite} km/h)`).join(', '))}</span></p>`
+      : '<p class="ruta-fotomultas secundario">Sin fotomultas conocidas en la ruta.</p>';
+    html = `<div class="ruta-resumen">
+        <h3>${escapar(destino.nombre)}</h3>
+        <p class="ruta-cifras">${textoDistancia(ruta.metros)} · ${textoDuracion(ruta.segundos)} <span>sin tráfico</span></p>
+        ${fotos}
+        <div class="ruta-acciones">
+          <button class="boton boton-principal" type="button" data-ruta="seguir">${ICONOS.ubicar}<span>Seguir mi carro</span></button>
+          <button class="boton" type="button" data-ruta="ver">Ver toda</button>
+          <button class="boton" type="button" data-ruta="quitar">Quitar ruta</button>
+        </div>
+      </div>
+      <ol class="ruta-pasos">${ruta.pasos.map((p) => `<li><span>${escapar(p.texto)}</span><span class="ruta-metros">${p.metros >= 10 ? textoDistancia(p.metros) : ''}</span></li>`).join('')}</ol>`;
+  } else if (destino) {
+    html = `<div class="ruta-resumen"><h3>${escapar(destino.nombre)}</h3><div class="ruta-acciones"><button class="boton" type="button" data-ruta="reintentar">${ICONOS.recargar}<span>Reintentar</span></button><button class="boton" type="button" data-ruta="quitar">Quitar destino</button></div></div>`;
+  }
+  if (html !== rutaPintada) {
+    rutaPintada = html;
+    $('.ruta-contenido').innerHTML = html;
+  }
+  pintarGuia(ruta && ubicacion.posicion() && !llegada ? seguirRuta(ruta, [ubicacion.posicion().latitud, ubicacion.posicion().longitud]) : null);
+}
+
+function abrirRuta(abrir) {
+  rutaAbierta = abrir;
+  if (abrir) mostrarPanel(true);
+  eligiendoDestino = false;
+  pintarPanel();
+  if (abrir && !destino && matchMedia('(min-width: 721px)').matches) rutaBusquedaEl.focus();
+}
+
+botonRutaEl.addEventListener('click', () => abrirRuta(!rutaAbierta));
+
+rutaBusquedaEl.addEventListener('input', () => {
+  clearTimeout(esperaBusqueda);
+  const texto = rutaBusquedaEl.value;
+  esperaBusqueda = setTimeout(() => buscarDestino(texto), 450);
+});
+$('.ruta-busqueda').addEventListener('submit', (evento) => {
+  evento.preventDefault();
+  clearTimeout(esperaBusqueda);
+  buscarDestino(rutaBusquedaEl.value);
+});
+
+panelRutaEl.addEventListener('click', (evento) => {
+  const objetivo = evento.target;
+  if (objetivo.closest('.ruta-cerrar')) return void abrirRuta(false);
+  if (objetivo.closest('.ruta-elegir')) {
+    // en el celular el panel tapa el mapa: se cierra mientras se elige
+    rutaAbierta = false;
+    eligiendoDestino = true;
+    elegida = null;
+    marcarMapa();
+    pintarPanel();
+    return;
+  }
+  const resultado = objetivo.closest('[data-resultado]');
+  if (resultado) return void fijarDestino(resultados[Number(resultado.dataset.resultado)]);
+  const accion = objetivo.closest('[data-ruta]');
+  if (!accion) return;
+  if (accion.dataset.ruta === 'quitar') quitarRuta();
+  else if (accion.dataset.ruta === 'reintentar') calcularRuta();
+  else if (accion.dataset.ruta === 'ver') {
+    siguiendo = false;
+    mapa.encuadrar(ruta.puntos);
+    pintarUbicar();
+    if (matchMedia('(max-width: 720px)').matches) abrirRuta(false);
+  } else if (accion.dataset.ruta === 'seguir') {
+    siguiendo = true;
+    if (!ubicacion.activa()) activarUbicacion(true);
+    else mapa.vehiculo(ubicacion.posicion(), true);
+    pintarUbicar();
+    if (matchMedia('(max-width: 720px)').matches) abrirRuta(false);
+  }
+});
+
+guiaEl.addEventListener('click', (evento) => {
+  const accion = evento.target.closest('[data-guia]');
+  if (!accion) return;
+  if (accion.dataset.guia === 'quitar') quitarRuta();
+  else abrirRuta(true);
+});
+
+/** Toque en el mapa: si se está eligiendo destino, ese punto lo es. */
+function tocarMapa([latitud, longitud]) {
+  if (!eligiendoDestino) return;
+  fijarDestino({ nombre: 'Punto en el mapa', detalle: `${latitud.toFixed(5)}, ${longitud.toFixed(5)}`, latitud, longitud });
+}
 
 /** Avanza la animación del radar (si se está viendo). */
 function animarRadar() {
@@ -820,9 +1194,11 @@ function textoRio(id) {
 
 function pintarPanel() {
   const hay = elegida != null;
-  panelVacioEl.hidden = hay;
-  panelCamaraEl.hidden = !hay;
-  panelEl.classList.toggle('abierto', hay);
+  panelRutaEl.hidden = !rutaAbierta;
+  panelVacioEl.hidden = hay || rutaAbierta;
+  panelCamaraEl.hidden = !hay || rutaAbierta;
+  panelEl.classList.toggle('abierto', hay || rutaAbierta);
+  pintarRuta();
   if (!hay) return;
   const estado = estados.get(elegida);
   ponerFoto(panelCamaraEl.querySelector('.panel-foto img'), estado);
