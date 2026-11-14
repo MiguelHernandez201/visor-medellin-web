@@ -12,6 +12,7 @@
 //   datos/alertas.json        alertas vigentes para la ciudadanía
 //   datos/series/<cód>.json   nivel de las últimas 3 h de las estaciones que tienen cámara
 //   datos/umbrales.json       últimos umbrales conocidos de cada estación (cm)
+//   datos/fotomultas.json     cámaras de fotodetección de la Alcaldía (se renueva una vez al día)
 //   datos/estado.json         cuándo se generó y qué falló
 //
 // Los archivos son las respuestas del geoportal tal cual, salvo niveles.json, al que se le
@@ -119,6 +120,61 @@ if (respuestas['niveles.json']) {
   }
 }
 guardar('umbrales.json', umbrales);
+
+// Fotomultas: capa "Camaras_FDT" del servidor de mapas de la Alcaldía de Medellín. Cambia muy
+// de vez en cuando, así que se lee una vez al día; si falla o llega algo raro, queda la anterior.
+const FOTOMULTAS =
+  'https://www.medellin.gov.co/servidormapas/rest/services/transporte/VC_Infraest_Gestion_Transito/MapServer/3/query?where=1%3D1&outFields=*&outSR=4326&f=json';
+const SENTIDOS = {
+  'SUR-NORTE': 'sur a norte',
+  'NORTE-SUR': 'norte a sur',
+  'OCCIDENTE-ORIENTE': 'occidente a oriente',
+  'ORIENTE-OCCIDENTE': 'oriente a occidente',
+};
+
+/** Las cámaras de varios carriles de un mismo punto y sentido se juntan en una. */
+function leerFotomultas(json) {
+  const limpio = (texto) => String(texto || '').replace(/\s+/g, ' ').trim();
+  const marcada = (valor) => limpio(valor) !== '';
+  const grupos = new Map();
+  for (const { attributes: a } of json.features || []) {
+    const sentido = SENTIDOS[limpio(a.sentido).toUpperCase()];
+    const fuera = /^(NO |FUERA|INACTIV|SUSPEND)/i.test(limpio(a.operando));
+    if (!sentido || fuera || typeof a.latitud !== 'number' || typeof a.longitud !== 'number' || !(a.vel_max_k > 0)) continue;
+    // el nombre trae el sentido al final ("Don Quijote NORTE-SUR"): se le quita
+    let nombre = limpio(a.descripcion);
+    const cola = /[\s-]*\b(NORTE[- ]SUR|SUR[- ]NORTE|OCC-ORI|ORI-OCC|S-N|N-S)$/i;
+    while (cola.test(nombre)) nombre = nombre.replace(cola, ''); // a veces viene dos veces ("S-N SUR-NORTE")
+    nombre = nombre.replace(/^[\s-]+|[\s-]+$/g, '');
+    const clave = `${nombre}|${sentido}`;
+    if (!grupos.has(clave)) grupos.set(clave, []);
+    grupos.get(clave).push(a);
+  }
+  return [...grupos.entries()].map(([clave, lista]) => {
+    const [nombre, sentido] = clave.split('|');
+    const media = (campo) => Math.round((lista.reduce((suma, a) => suma + a[campo], 0) / lista.length) * 1e5) / 1e5;
+    const detecta = [['v', 'ev'], ['r', 'sr'], ['p', 'pyp']].filter(([, campo]) => lista.some((a) => marcada(a[campo]))).map(([letra]) => letra).join('');
+    return { nombre: nombre || limpio(lista[0].direccion), direccion: limpio(lista[0].direccion), sentido, limite: Math.round(lista[0].vel_max_k), latitud: media('latitud'), longitud: media('longitud'), detecta };
+  });
+}
+
+const fotomultasAntes = leerJson('fotomultas.json', null);
+const edadHoras = fotomultasAntes && fotomultasAntes.leido ? (Date.now() - Date.parse(fotomultasAntes.leido)) / 3600000 : Infinity;
+if (edadHoras < 20) {
+  estado.archivos['fotomultas.json'] = { ok: true, camaras: fotomultasAntes.camaras.length, leido: fotomultasAntes.leido };
+} else {
+  try {
+    const respuesta = await fetch(FOTOMULTAS, { headers: { 'User-Agent': 'Mozilla/5.0 (visor-medellin-web; relevo de datos)' }, signal: AbortSignal.timeout(30000) });
+    if (!respuesta.ok) throw new Error(`HTTP ${respuesta.status}`);
+    const camaras = leerFotomultas(await respuesta.json());
+    const enElValle = camaras.every((c) => c.latitud > 5.9 && c.latitud < 6.6 && c.longitud > -75.9 && c.longitud < -75.2);
+    if (camaras.length < 10 || !enElValle) throw new Error(`respuesta rara (${camaras.length} cámaras)`);
+    guardar('fotomultas.json', { leido: new Date().toISOString(), camaras });
+    estado.archivos['fotomultas.json'] = { ok: true, camaras: camaras.length };
+  } catch (error) {
+    estado.archivos['fotomultas.json'] = { ok: false, error: String(error.message || error) };
+  }
+}
 
 for (const [archivo, datos] of Object.entries(respuestas)) guardar(archivo, datos);
 guardar('estado.json', estado);

@@ -538,6 +538,116 @@ body.en-mapa .contenido {
   background: #0e1116;
 }
 
+.mapa-caja {
+  overflow: hidden;
+}
+
+/* Mapa que gira con el carro (ver `girar` en mapa.js). --giro es un ángulo animable: así el
+   mapa y lo que se contragira dentro de él (puntos, señales, globos) se mueven a la vez. */
+@property --giro {
+  syntax: "<angle>";
+  inherits: true;
+  initial-value: 0deg;
+}
+
+.mapa.girable {
+  inset: auto;
+  top: 50%;
+  left: 50%;
+  width: var(--lado, 100%);
+  height: var(--lado, 100%);
+  margin: calc(var(--lado, 100%) / -2) 0 0 calc(var(--lado, 100%) / -2);
+  rotate: var(--giro);
+  transition: --giro 0.9s linear;
+}
+
+.mapa.girable.sin-animar {
+  transition: none;
+}
+
+.mapa.girable .punto,
+.mapa.girable .marcador .fotomulta,
+.mapa.girable .gota,
+.mapa.girable .destino,
+.mapa.girable .leaflet-popup {
+  rotate: calc(-1 * var(--giro));
+}
+
+.mapa.girable .leaflet-popup {
+  transform-origin: 50% 100%;
+}
+
+/* mientras gira, el carro no se desliza: la posición la da el propio giro */
+.mapa.girable .vehiculo-marcador {
+  transition: none;
+}
+
+.zoom-mapa {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 800;
+  display: grid;
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.zoom-mapa button {
+  width: 44px;
+  height: 42px;
+  border: 0;
+  background: rgba(13, 20, 32, 0.92);
+  font-size: 1.4rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.zoom-mapa button + button {
+  border-top: 1px solid var(--borde);
+}
+
+.zoom-mapa button:hover {
+  color: var(--acento);
+}
+
+.mapa-creditos {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  z-index: 790;
+  padding: 1px 6px;
+  background: rgba(5, 7, 13, 0.7);
+  color: var(--texto-suave);
+  font-size: 11px;
+  pointer-events: none;
+}
+
+.boton-norte {
+  position: absolute;
+  top: 104px;
+  right: 62px;
+  z-index: 800;
+  background: rgba(5, 7, 13, 0.88);
+  color: var(--texto-suave);
+}
+
+.boton-norte[aria-pressed="true"] {
+  border-color: var(--acento);
+  color: var(--acento);
+}
+
+.brujula {
+  display: grid;
+  transition: rotate 0.9s linear;
+}
+
+.guia .nivel-lluvia-texto-1 { color: var(--lluvia-1); }
+.guia .nivel-lluvia-texto-2 { color: var(--lluvia-2); }
+.guia .nivel-lluvia-texto-3 { color: var(--lluvia-3); }
+.guia .nivel-lluvia-texto-4 { color: var(--lluvia-4); }
+
 .leaflet-container {
   font: inherit;
   background: #0e1116;
@@ -782,7 +892,7 @@ body.en-mapa .contenido {
 
 .boton-ubicar {
   position: absolute;
-  top: 96px;
+  top: 104px;
   right: 10px;
   z-index: 800;
   background: rgba(5, 7, 13, 0.88);
@@ -805,7 +915,7 @@ body.en-mapa .contenido {
 
 .nota-ubicacion {
   position: absolute;
-  top: 146px;
+  top: 154px;
   right: 10px;
   z-index: 800;
   max-width: 200px;
@@ -1036,6 +1146,193 @@ body.en-mapa .contenido {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.ruta-lluvia {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 0.9rem;
+}
+
+.ruta-lluvia svg {
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+}
+
+.ruta-guardada {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 6px;
+  color: var(--texto-suave);
+  font-size: 0.9rem;
+}
+
+.ruta-guardada svg {
+  width: 18px;
+  height: 18px;
+  color: var(--acento);
+}
+
+.ruta-subtitulo,
+.ruta-camaras h4 {
+  margin: 4px 0 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--texto-suave);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ruta-guardados {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ruta-guardados li {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.ruta-guardados li > button:first-child,
+.ruta-guardados .guardado-vacio {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  min-height: 56px;
+  padding: 8px 12px;
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  background: var(--superficie-2);
+  text-align: left;
+  cursor: pointer;
+}
+
+.ruta-guardados .guardado-vacio {
+  border-style: dashed;
+  background: transparent;
+  color: var(--texto-suave);
+  cursor: default;
+}
+
+.ruta-guardados li > button:first-child:hover {
+  border-color: var(--acento);
+}
+
+.ruta-guardados svg {
+  width: 22px;
+  height: 22px;
+  color: var(--acento);
+}
+
+.ruta-guardados .guardado-vacio svg {
+  color: var(--texto-suave);
+}
+
+.ruta-guardados span {
+  display: grid;
+  min-width: 0;
+}
+
+.ruta-guardados strong,
+.ruta-guardados small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ruta-guardados .guardado-vacio small {
+  white-space: normal;
+}
+
+.ruta-guardados small {
+  font-size: 0.82rem;
+  color: var(--texto-suave);
+}
+
+.guardado-quitar {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.guardado-quitar svg {
+  width: 18px;
+  height: 18px;
+  color: var(--texto-suave);
+}
+
+.guardado-quitar:hover svg {
+  color: var(--rojo);
+}
+
+.ruta-camaras {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ruta-tira {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+
+.ruta-tira button {
+  flex: none;
+  display: grid;
+  gap: 2px;
+  width: 132px;
+  padding: 0 0 6px;
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  background: var(--superficie-2);
+  overflow: hidden;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ruta-tira button:hover {
+  border-color: var(--acento);
+}
+
+.ruta-foto {
+  display: block;
+  aspect-ratio: 4 / 3;
+  background: #05070d;
+}
+
+.ruta-foto img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ruta-tira strong,
+.ruta-tira small {
+  padding: 0 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.82rem;
+}
+
+.ruta-tira small {
+  color: var(--texto-suave);
 }
 
 .ruta-pasos {
@@ -2198,6 +2495,19 @@ body.en-mapa .contenido {
   .boton-ubicar {
     top: 150px;
     right: 10px;
+  }
+
+  .boton-norte {
+    top: 150px;
+    right: 62px;
+  }
+
+  .zoom-mapa {
+    top: 8px;
+  }
+
+  .mapa-creditos {
+    font-size: 9px;
   }
 
   .nota-ubicacion {

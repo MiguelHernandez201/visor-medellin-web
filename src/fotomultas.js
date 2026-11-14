@@ -1,10 +1,18 @@
 // Cámaras de fotodetección ("fotomultas") de Medellín. Fuente: capa "Camaras_FDT" del servidor
-// de mapas de la Alcaldía (la misma del mapa oficial del SIMM), leída el 13 de noviembre de 2026:
+// de mapas de la Alcaldía (la misma del mapa oficial del SIMM):
 //   https://www.medellin.gov.co/servidormapas/rest/services/transporte/VC_Infraest_Gestion_Transito/MapServer/3
+// El relevo de datos (scripts/datos.mjs) la lee una vez al día y la deja en fotomultas.json;
+// la app la toma de ahí. La lista de abajo (leída el 13 de noviembre de 2026) es la de
+// respaldo, por si el relevo no responde.
 // Las cámaras de varios carriles de un mismo punto y sentido van como una sola.
 // Cada entrada: [lugar, dirección, sentido, límite en km/h, latitud, longitud, qué detecta]
 // (v = exceso de velocidad, r = semáforo en rojo, p = pico y placa; todas revisan SOAT y
-// técnico-mecánica). La Alcaldía puede mover o añadir cámaras: esta lista no se actualiza sola.
+// técnico-mecánica).
+import { fuenteJson } from './geoportal.js';
+
+const SENTIDOS = ['sur a norte', 'norte a sur', 'occidente a oriente', 'oriente a occidente'];
+
+/** La lista vigente. Es siempre el mismo arreglo: al llegar datos nuevos cambia su contenido. */
 export const FOTOMULTAS = [
   ["Don Quijote", "Avenida 80 por Calle 35", "norte a sur", 50, 6.24369, -75.60286, "vrp"],
   ["La Mota", "Avenida 80 por Carrera 76", "norte a sur", 50, 6.21903, -75.59924, "vrp"],
@@ -58,3 +66,36 @@ export const FOTOMULTAS = [
   longitud,
   detecta,
 }));
+
+let leido = null; // cuándo leyó el relevo la lista vigente (null = es la de respaldo)
+
+const fuente = fuenteJson('fotomultas.json', 6 * 60 * 60 * 1000, (json) => {
+  const camaras = (json && json.camaras) || [];
+  const validas = camaras.filter(
+    (c) => c && typeof c.latitud === 'number' && typeof c.longitud === 'number' && c.limite > 0 && SENTIDOS.includes(c.sentido) && c.nombre,
+  );
+  // una respuesta rara no reemplaza la lista que ya se tiene
+  if (validas.length < 10 || validas.length !== camaras.length) return null;
+  FOTOMULTAS.splice(
+    0,
+    FOTOMULTAS.length,
+    ...validas.map((c, i) => ({
+      id: i,
+      nombre: String(c.nombre),
+      direccion: String(c.direccion || ''),
+      sentido: c.sentido,
+      limite: Math.round(c.limite),
+      latitud: c.latitud,
+      longitud: c.longitud,
+      detecta: String(c.detecta || ''),
+    })),
+  );
+  leido = json.leido || null;
+  return true;
+});
+
+export const revisarFotomultas = fuente.revisar;
+/** `fn()` se llama cuando llega una lista nueva del relevo. */
+export const alActualizarFotomultas = (fn) => fuente.alActualizar(() => fuente.datos() && fn());
+/** Fecha (texto ISO) en que el relevo leyó la lista, o null si se está usando la de respaldo. */
+export const fotomultasLeidas = () => leido;

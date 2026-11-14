@@ -45,10 +45,20 @@ import { crearMapa } from './mapa.js';
 import { ICONOS } from './iconos.js';
 import { registrarServiceWorker, prepararInstalacion } from './pwa.js';
 import { crearMotor } from './motor.js';
-import { FOTOMULTAS } from './fotomultas.js';
+import { FOTOMULTAS, revisarFotomultas, alActualizarFotomultas } from './fotomultas.js';
 import { crearAvisos } from './avisos.js';
 import { crearUbicacion } from './ubicacion.js';
-import { buscarLugares, calcularRuta as calcularRutaOsrm, seguirRuta, fotomultasEnRuta, textoDistancia, textoDuracion } from './rutas.js';
+import {
+  buscarLugares,
+  calcularRuta as calcularRutaOsrm,
+  seguirRuta,
+  fotomultasEnRuta,
+  muestrasDeRuta,
+  cercaDeRuta,
+  viaEn,
+  textoDistancia,
+  textoDuracion,
+} from './rutas.js';
 
 const RECORRIDO_MS = 15 * 1000; // cuánto se ve cada cámara en el recorrido
 const PRECARGA_MS = 4 * 1000; // antes de pasar a la siguiente, se pide su imagen
@@ -322,6 +332,12 @@ app.innerHTML = `
         <button class="boton-ruta" type="button" aria-pressed="false" title="Buscar una ruta en carro">${ICONOS.ruta}<span>Ruta</span></button>
         <button class="boton-icono boton-ubicar" type="button" aria-pressed="false" aria-label="Ver mi carro en el mapa" title="Ver mi carro en el mapa">${ICONOS.ubicar}</button>
         <span class="nota-ubicacion" hidden></span>
+        <button class="boton-icono boton-norte" type="button" aria-pressed="false" hidden><span class="brujula">${ICONOS.brujula}</span></button>
+        <div class="zoom-mapa" role="group" aria-label="Zoom">
+          <button type="button" data-zoom="1" aria-label="Acercar" title="Acercar">+</button>
+          <button type="button" data-zoom="-1" aria-label="Alejar" title="Alejar">−</button>
+        </div>
+        <span class="mapa-creditos">Esri, HERE, Garmin, © OpenStreetMap · radar y pluviómetros: SIATA</span>
         <div class="guia" aria-live="polite" hidden></div>
         <div class="mapa-leyenda">
           <span class="mapa-leyenda-titulo"></span>
@@ -441,6 +457,7 @@ const botonRutaEl = $('.boton-ruta');
 const botonPanelEl = $('.boton-panel');
 const botonUbicarEl = $('.boton-ubicar');
 const notaUbicacionEl = $('.nota-ubicacion');
+const botonNorteEl = $('.boton-norte');
 const guiaEl = $('.guia');
 const panelRutaEl = $('.panel-ruta');
 const rutaBusquedaEl = $('.ruta-busqueda input');
@@ -675,6 +692,7 @@ function pintarCamara(id) {
     pintarInsignias(id, tarjeta.lluvia, tarjeta.nivel);
   }
   if (seccion === 'mapa' && id === elegida) pintarPanel();
+  if (ruta && rutaAbierta && ruta.camaras.some((c) => c.lugar.id === id)) pintarFotosRuta();
   if (visor && visor.lista[visor.indice] === id) pintarVisor();
 }
 
@@ -705,6 +723,7 @@ function asegurarMapa() {
     alArrastrar: () => {
       if (!siguiendo) return;
       siguiendo = false;
+      giroYa = true; // girado, Leaflet arrastraría torcido: se endereza de una
       pintarUbicar();
     },
   });
@@ -802,9 +821,20 @@ function htmlFotomulta(camara) {
     <span>Detecta: ${escapar(detecta.join(', '))}.</span>`;
 }
 
+// La lista de fotomultas se renueva sola desde el relevo (una vez al día).
+let versionFotomultas = 0;
+alActualizarFotomultas(() => {
+  versionFotomultas += 1;
+  pintarFotomultas();
+  if (ruta) {
+    ruta.fotomultas = fotomultasEnRuta(ruta, FOTOMULTAS);
+    pintarRuta();
+  }
+});
+
 function pintarFotomultas() {
   if (!mapa) return;
-  mapa.fotomultas(verFotomultas ? FOTOMULTAS : null, htmlFotomulta);
+  mapa.fotomultas(verFotomultas ? FOTOMULTAS : null, htmlFotomulta, versionFotomultas);
   botonFotomultasEl.setAttribute('aria-pressed', String(verFotomultas));
   $('.leyenda-fotomulta').hidden = !verFotomultas;
 }
@@ -866,6 +896,9 @@ botonAvisoEl.addEventListener('click', () => {
 // El carro en el mapa y las rutas (ubicacion.js, rutas.js)
 // ---------------------------------------------------------------------------
 let siguiendo = false; // el mapa se mueve con el carro
+let rumboArriba = leerPreferencia('rumboArriba', true); // siguiendo al carro, el mapa gira con él
+let girando = false;
+let giroYa = false; // el próximo cambio de giro va sin animación (lo pide un arrastre)
 let rutaAbierta = false; // el panel muestra la búsqueda de ruta
 let eligiendoDestino = false; // el próximo toque en el mapa es el destino
 let destino = null; // { nombre, detalle, latitud, longitud }
@@ -906,7 +939,45 @@ function pintarUbicar(estado = ubicacion.estado(), posicion = ubicacion.posicion
   else if (posicion) nota = `${Math.round(posicion.velocidad * 3.6)} km/h`;
   if (notaUbicacionEl.textContent !== nota) notaUbicacionEl.textContent = nota;
   notaUbicacionEl.hidden = !nota;
+  pintarGiro(posicion);
 }
+
+/**
+ * Gira el mapa con el rumbo del carro mientras se le sigue (si así se eligió). Al dejar de
+ * seguirlo o al ir a tocar un destino, vuelve al norte arriba.
+ */
+function pintarGiro(posicion = ubicacion.posicion()) {
+  const activa = ubicacion.activa();
+  botonNorteEl.hidden = !activa;
+  botonNorteEl.setAttribute('aria-pressed', String(rumboArriba));
+  const texto = rumboArriba ? 'Rumbo arriba: el mapa gira con el carro. Toca para dejar el norte arriba' : 'Norte arriba. Toca para que el mapa gire con el carro';
+  botonNorteEl.title = texto;
+  botonNorteEl.setAttribute('aria-label', texto);
+  if (!mapa) return;
+  mapa.girable(rumboArriba && activa);
+  const debe = rumboArriba && activa && siguiendo && !eligiendoDestino && Boolean(posicion) && posicion.rumbo != null;
+  if (debe) {
+    // detenido, el rumbo del GPS baila: se conserva el último giro
+    if (!girando || posicion.velocidad > 1.5) mapa.girar(posicion.rumbo);
+    botonNorteEl.querySelector('.brujula').style.rotate = `${-Math.round(posicion.rumbo)}deg`;
+  } else if (girando || giroYa) {
+    mapa.girar(0, giroYa);
+    botonNorteEl.querySelector('.brujula').style.rotate = '0deg';
+  }
+  girando = debe;
+  giroYa = false;
+}
+
+botonNorteEl.addEventListener('click', () => {
+  rumboArriba = !rumboArriba;
+  guardarPreferencia('rumboArriba', rumboArriba);
+  pintarGiro();
+});
+
+$('.zoom-mapa').addEventListener('click', (evento) => {
+  const boton = evento.target.closest('[data-zoom]');
+  if (boton && mapa) mapa.acercar(Number(boton.dataset.zoom));
+});
 
 botonUbicarEl.addEventListener('click', () => {
   if (!ubicacion.activa()) {
@@ -965,6 +1036,7 @@ function fijarDestino(lugar) {
   rutaAbierta = true;
   mostrarPanel(true);
   rutaBusquedaEl.value = lugar.nombre;
+  recordarDestino(lugar);
   mapa.ruta(null, [lugar.latitud, lugar.longitud]);
   calcularRuta();
 }
@@ -1015,6 +1087,14 @@ async function calcularRuta(recalculo = false) {
     const nueva = await calcularRutaOsrm([origen.latitud, origen.longitud], [destino.latitud, destino.longitud], control.signal);
     if (calculoRuta !== control) return;
     nueva.fotomultas = fotomultasEnRuta(nueva, FOTOMULTAS);
+    nueva.muestras = muestrasDeRuta(nueva, 250); // para mirar la lluvia a lo largo del trazado
+    nueva.camaras = cercaDeRuta(
+      nueva,
+      camarasDeSeccion('mapa').map((id) => ({ id, latitud: coordenadasCamara(id)[0], longitud: coordenadasCamara(id)[1] })),
+      60,
+    ).slice(0, 12);
+    nueva.recorrido = 0;
+    nueva.camaras.forEach((c) => revisarFoto(c.lugar.id));
     ruta = nueva;
     rutaEstado = desdeCentro ? 'Sin GPS: la ruta sale del centro del mapa.' : '';
     mapa.ruta(ruta.puntos, [destino.latitud, destino.longitud]);
@@ -1039,6 +1119,7 @@ async function calcularRuta(recalculo = false) {
 function guiar(posicion) {
   if (!ruta || llegada) return;
   const avance = seguirRuta(ruta, [posicion.latitud, posicion.longitud]);
+  ruta.recorrido = avance.recorrido;
   if (avance.restante < 35 && avance.fuera < 60) {
     llegada = true;
     pintarGuia(null);
@@ -1056,8 +1137,10 @@ function pintarGuia(avance) {
   else if (llegada) html = '<strong>Llegaste a tu destino</strong><button class="enlace" type="button" data-guia="quitar">Quitar ruta</button>';
   else if (ruta && avance) {
     const fuera = fueraDeRuta >= 3 ? '<span class="guia-nota">Fuera de la ruta: recalculando…</span>' : '';
+    const lluvia = lluviaEnRuta();
+    const aviso = lluvia && lluvia.nivel ? `<span class="nivel-lluvia-texto-${lluvia.nivel}">${NIVELES[lluvia.nivel]} ${lluvia.en < 150 ? 'en este tramo' : `en ${textoDistancia(lluvia.en)}`}</span>` : '';
     html = `<strong>En ${textoDistancia(avance.metrosAlPaso)} · ${escapar(avance.paso.texto)}</strong>
-      <span>Faltan ${textoDistancia(avance.restante)} · ${textoDuracion(avance.segundos)}</span>${fuera}`;
+      <span>Faltan ${textoDistancia(avance.restante)} · ${textoDuracion(avance.segundos)}</span>${aviso}${fuera}`;
   } else if (ruta) {
     html = `<strong>${escapar(destino.nombre)}</strong><span>${textoDistancia(ruta.metros)} · ${textoDuracion(ruta.segundos)} sin tráfico</span>`;
   }
@@ -1067,6 +1150,52 @@ function pintarGuia(avance) {
   }
   guiaEl.hidden = !html;
   $('.mapa-caja').classList.toggle('con-guia', Boolean(html));
+}
+
+// Destinos guardados: casa, trabajo y los últimos buscados (solo en este navegador).
+const guardados = { casa: null, trabajo: null, recientes: [], ...leerPreferencia('destinos', {}) };
+if (!Array.isArray(guardados.recientes)) guardados.recientes = [];
+const GUARDADOS = [
+  { clave: 'casa', titulo: 'Casa', icono: ICONOS.casa },
+  { clave: 'trabajo', titulo: 'Trabajo', icono: ICONOS.trabajo },
+];
+const mismoLugar = (a, b) => Boolean(a && b) && Math.abs(a.latitud - b.latitud) < 0.0002 && Math.abs(a.longitud - b.longitud) < 0.0002;
+
+function recordarDestino(lugar) {
+  if (mismoLugar(lugar, guardados.casa) || mismoLugar(lugar, guardados.trabajo)) return;
+  guardados.recientes = [lugar, ...guardados.recientes.filter((r) => !mismoLugar(r, lugar))].slice(0, 6);
+  guardarPreferencia('destinos', guardados);
+}
+
+/**
+ * Lluvia que le queda a la ruta por delante, según el radar: { nivel (el peor), en (metros
+ * hasta donde empieza), via, metros (tramo con lluvia) }, o null si no hay radar.
+ */
+function lluviaEnRuta() {
+  if (!ruta || !imagenRadar()) return null;
+  const desdeAqui = ruta.recorrido || 0;
+  let nivel = 0;
+  let inicio = null;
+  let muestras = 0;
+  for (const muestra of ruta.muestras) {
+    if (muestra.desde < desdeAqui) continue;
+    const aqui = lluviaEn(muestra.latitud, muestra.longitud) || 0;
+    if (!aqui) continue;
+    muestras += 1;
+    if (inicio == null) inicio = muestra.desde;
+    if (aqui > nivel) nivel = aqui;
+  }
+  if (!nivel) return { nivel: 0, en: 0, via: '', metros: 0 };
+  return { nivel, en: Math.max(0, inicio - desdeAqui), via: viaEn(ruta, inicio), metros: muestras * 250 };
+}
+
+/** Pone en las miniaturas de «Cámaras en la ruta» la foto que ya se tenga de cada una. */
+function pintarFotosRuta() {
+  if (!ruta) return;
+  panelRutaEl.querySelectorAll('[data-camara-ruta]').forEach((boton) => {
+    const camara = ruta.camaras[Number(boton.dataset.camaraRuta)];
+    if (camara) ponerFoto(boton.querySelector('img'), estados.get(camara.lugar.id));
+  });
 }
 
 let rutaPintada = '';
@@ -1084,24 +1213,64 @@ function pintarRuta() {
     const fotos = camaras.length
       ? `<p class="ruta-fotomultas"><span class="fotomulta">${camaras.length}</span><span>${camaras.length === 1 ? 'Una fotomulta' : `${camaras.length} fotomultas`} en la ruta: ${escapar(camaras.map((c) => `${c.camara.nombre} (${c.camara.limite} km/h)`).join(', '))}</span></p>`
       : '<p class="ruta-fotomultas secundario">Sin fotomultas conocidas en la ruta.</p>';
+    const lluvia = lluviaEnRuta();
+    let textoLluviaRuta = '';
+    if (lluvia && lluvia.nivel) {
+      const donde = lluvia.en < 150 ? 'desde aquí' : `empieza a ${textoDistancia(lluvia.en)}`;
+      textoLluviaRuta = `<p class="ruta-lluvia nivel-lluvia-texto-${lluvia.nivel}">${ICONOS.gota}<span>${NIVELES[lluvia.nivel]} en la ruta: ${donde}${lluvia.via ? `, por ${escapar(lluvia.via)}` : ''} · unos ${textoDistancia(lluvia.metros)} con lluvia, según el radar</span></p>`;
+    } else if (lluvia) {
+      textoLluviaRuta = `<p class="ruta-lluvia secundario">Sin lluvia en la ruta, según el radar.</p>`;
+    }
+    const guardar = GUARDADOS.map(({ clave, titulo, icono }) =>
+      mismoLugar(guardados[clave], destino)
+        ? `<span class="ruta-guardada">${icono}<span>Guardado como ${titulo.toLowerCase()}</span></span>`
+        : `<button class="boton" type="button" data-ruta="${clave}">${icono}<span>Guardar como ${titulo.toLowerCase()}</span></button>`,
+    ).join('');
+    const tira = ruta.camaras.length
+      ? `<div class="ruta-camaras"><h4>Cámaras en la ruta</h4><div class="ruta-tira">${ruta.camaras
+          .map(
+            (c, i) =>
+              `<button type="button" data-camara-ruta="${i}" title="${escapar(nombreCamara(c.lugar.id))}"><span class="ruta-foto"><img alt="" hidden></span><strong>${escapar(nombreCamara(c.lugar.id))}</strong><small>a ${textoDistancia(c.desde)}</small></button>`,
+          )
+          .join('')}</div></div>`
+      : '';
     html = `<div class="ruta-resumen">
         <h3>${escapar(destino.nombre)}</h3>
         <p class="ruta-cifras">${textoDistancia(ruta.metros)} · ${textoDuracion(ruta.segundos)} <span>sin tráfico</span></p>
+        ${textoLluviaRuta}
         ${fotos}
         <div class="ruta-acciones">
           <button class="boton boton-principal" type="button" data-ruta="seguir">${ICONOS.ubicar}<span>Seguir mi carro</span></button>
           <button class="boton" type="button" data-ruta="ver">Ver toda</button>
           <button class="boton" type="button" data-ruta="quitar">Quitar ruta</button>
         </div>
+        <div class="ruta-acciones">${guardar}</div>
       </div>
+      ${tira}
       <ol class="ruta-pasos">${ruta.pasos.map((p) => `<li><span>${escapar(p.texto)}</span><span class="ruta-metros">${p.metros >= 10 ? textoDistancia(p.metros) : ''}</span></li>`).join('')}</ol>`;
   } else if (destino) {
     html = `<div class="ruta-resumen"><h3>${escapar(destino.nombre)}</h3><div class="ruta-acciones"><button class="boton" type="button" data-ruta="reintentar">${ICONOS.recargar}<span>Reintentar</span></button><button class="boton" type="button" data-ruta="quitar">Quitar destino</button></div></div>`;
+  } else {
+    // sin destino: los guardados y los recientes, a un toque
+    const fijos = GUARDADOS.map(({ clave, titulo, icono }) => {
+      const lugar = guardados[clave];
+      return lugar
+        ? `<li><button type="button" data-guardado="${clave}">${icono}<span><strong>${titulo}</strong><small>${escapar(lugar.nombre)}</small></span></button><button class="guardado-quitar" type="button" data-olvidar="${clave}" aria-label="Quitar ${titulo}">${ICONOS.cerrar}</button></li>`
+        : `<li class="guardado-vacio">${icono}<span><strong>${titulo}</strong><small>Traza una ruta y toca «Guardar como ${titulo.toLowerCase()}»</small></span></li>`;
+    }).join('');
+    const recientes = guardados.recientes
+      .map(
+        (lugar, i) =>
+          `<li><button type="button" data-guardado="${i}">${ICONOS.reloj}<span><strong>${escapar(lugar.nombre)}</strong><small>${escapar(lugar.detalle || '')}</small></span></button><button class="guardado-quitar" type="button" data-olvidar="${i}" aria-label="Quitar de recientes">${ICONOS.cerrar}</button></li>`,
+      )
+      .join('');
+    html = `<ul class="ruta-guardados">${fijos}</ul>${recientes ? `<h4 class="ruta-subtitulo">Recientes</h4><ul class="ruta-guardados">${recientes}</ul>` : ''}`;
   }
   if (html !== rutaPintada) {
     rutaPintada = html;
     $('.ruta-contenido').innerHTML = html;
   }
+  pintarFotosRuta();
   pintarGuia(ruta && ubicacion.posicion() && !llegada ? seguirRuta(ruta, [ubicacion.posicion().latitud, ubicacion.posicion().longitud]) : null);
 }
 
@@ -1136,13 +1305,43 @@ panelRutaEl.addEventListener('click', (evento) => {
     elegida = null;
     marcarMapa();
     pintarPanel();
+    pintarGiro(); // norte arriba mientras se toca el destino
     return;
   }
   const resultado = objetivo.closest('[data-resultado]');
   if (resultado) return void fijarDestino(resultados[Number(resultado.dataset.resultado)]);
+  const olvidar = objetivo.closest('[data-olvidar]');
+  if (olvidar) {
+    const clave = olvidar.dataset.olvidar;
+    if (clave === 'casa' || clave === 'trabajo') guardados[clave] = null;
+    else guardados.recientes.splice(Number(clave), 1);
+    guardarPreferencia('destinos', guardados);
+    return void pintarRuta();
+  }
+  const guardado = objetivo.closest('[data-guardado]');
+  if (guardado) {
+    const clave = guardado.dataset.guardado;
+    const lugar = clave === 'casa' || clave === 'trabajo' ? guardados[clave] : guardados.recientes[Number(clave)];
+    if (lugar) fijarDestino(lugar);
+    return;
+  }
+  const camaraRuta = objetivo.closest('[data-camara-ruta]');
+  if (camaraRuta && ruta) {
+    abrirVisor(ruta.camaras.map((c) => c.lugar.id), Number(camaraRuta.dataset.camaraRuta));
+    visor.deRuta = true;
+    return;
+  }
   const accion = objetivo.closest('[data-ruta]');
   if (!accion) return;
-  if (accion.dataset.ruta === 'quitar') quitarRuta();
+  if (accion.dataset.ruta === 'casa' || accion.dataset.ruta === 'trabajo') {
+    const clave = accion.dataset.ruta;
+    // un punto tocado en el mapa no tiene nombre propio: toma el de la casilla
+    const nombre = destino.nombre === 'Punto en el mapa' ? (clave === 'casa' ? 'Casa' : 'Trabajo') : destino.nombre;
+    guardados[clave] = { ...destino, nombre };
+    guardados.recientes = guardados.recientes.filter((r) => !mismoLugar(r, destino));
+    guardarPreferencia('destinos', guardados);
+    pintarRuta();
+  } else if (accion.dataset.ruta === 'quitar') quitarRuta();
   else if (accion.dataset.ruta === 'reintentar') calcularRuta();
   else if (accion.dataset.ruta === 'ver') {
     siguiendo = false;
@@ -1285,10 +1484,12 @@ function abrirVisor(lista, indice, conRecorrido = false) {
 function cerrarVisor() {
   if (!visor) return;
   const id = visor.lista[visor.indice];
+  const deRuta = visor.deRuta;
   visor = null;
   visorEl.hidden = true;
   document.body.classList.remove('con-visor');
-  if (seccion === 'mapa' && mapa && camarasDeSeccion('mapa').includes(id)) elegirEnMapa(id);
+  if (deRuta) pintarPanel(); // se abrió desde las cámaras de la ruta: el panel sigue en la ruta
+  else if (seccion === 'mapa' && mapa && camarasDeSeccion('mapa').includes(id)) elegirEnMapa(id);
   else {
     const tarjeta = tarjetas.get(id);
     if (tarjeta) tarjeta.el.scrollIntoView({ block: 'nearest' });
@@ -1532,7 +1733,10 @@ function tic() {
   revisarMeteo();
   revisarAlertas();
   revisarPluvios();
+  revisarFotomultas();
   if (seccion === 'mapa') {
+    // las fotos de las cámaras de la ruta, mientras su panel está a la vista
+    if (ruta && rutaAbierta && !visor) ruta.camaras.forEach((c) => revisarFoto(c.lugar.id, ahora));
     revisarAire();
     if (modoLluvia === 'animacion') revisarAnimacion();
   }
@@ -1595,6 +1799,7 @@ function pintarFrescura(ahora = Date.now()) {
 /** Cuando llegan datos nuevos (radar, niveles, pluviómetros…) se repintan las marcas. */
 function repintarDatos() {
   if (seccion === 'mapa') pintarMapa();
+  if (seccion === 'mapa' && ruta) pintarRuta(); // la lluvia en la ruta cambia con el radar
   else if (seccion !== 'motor') {
     tarjetas.forEach((_, id) => pintarCamara(id));
     if (filtros.lluvia || filtros.alerta) pintarLista();
