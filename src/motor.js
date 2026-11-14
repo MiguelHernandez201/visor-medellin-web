@@ -75,20 +75,6 @@ const MOTORES = [
     brillo: 3800,
     turbo: true,
   },
-  {
-    id: 'electrico',
-    nombre: 'Eléctrico',
-    detalle: 'Zumbido que sube con la velocidad',
-    pesos: [],
-    ralenti: 0,
-    corte: 16000,
-    marchas: [300],
-    res: [],
-    ancho: 1,
-    ruido: 0,
-    brillo: 4000,
-    electrico: true,
-  },
 ];
 
 const POR_DEFECTO = {
@@ -108,7 +94,7 @@ const AJUSTES = [
   { clave: 'intensidad', titulo: 'Intensidad', min: 0, max: 100, ayuda: 'Qué tan fácil la aceleración se vuelve acelerador y qué tan tarde cambia de marcha.' },
   { clave: 'caracter', titulo: 'Carácter', min: 0, max: 100, ayuda: 'De motor de serie y silenciado a leva brava con escape libre.' },
   { clave: 'petardeo', titulo: 'Petardeo', min: 0, max: 100, ayuda: 'Cuánto explota el escape al soltar el acelerador; 0 % es un motor limpio.' },
-  { clave: 'tono', titulo: 'Tono del silbido', min: -100, max: 100, ayuda: 'Más grave o más agudo (turbo, compresor o motor eléctrico).' },
+  { clave: 'tono', titulo: 'Tono del silbido', min: -100, max: 100, ayuda: 'Más grave o más agudo (turbo o compresor).' },
   { clave: 'silbido', titulo: 'Volumen del silbido', min: -100, max: 100, ayuda: 'Súbelo para añadir un silbido de compresor a cualquier motor.' },
 ];
 

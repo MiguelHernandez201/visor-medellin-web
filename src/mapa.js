@@ -4,6 +4,7 @@
 // - la lluvia: el radar (o un cuadro de la animación) o el mapa de calor, en un <canvas>
 //   sobre el RECORTE del valle, y una gota en cada pluviómetro donde llueve.
 // - las cámaras de fotodetección (fotomultas), como señales con el límite de velocidad.
+// - capas de puntos con globo: los cargadores de carros eléctricos y los moteles.
 // - el carro (flecha con el rumbo del GPS) y la ruta hasta un destino.
 // Fondo: teselas "World Dark Gray" de Esri (base y, encima de la lluvia, los nombres).
 import L from 'leaflet';
@@ -64,7 +65,8 @@ const CapaLienzo = L.Layer.extend({
 /**
  * Crea el mapa en `contenedor`. Opciones: { vista: { centro, zoom }, alElegir(id), alMover(vista),
  * alTocar([lat, lon]): toque en el mapa, alArrastrar(): el usuario movió el mapa con el dedo }.
- * Devuelve { ponerCamaras, marcar, elegir, lluvia, fotomultas, vehiculo, ruta, encuadrar, centro, invalidar }.
+ * Devuelve { ponerCamaras, marcar, elegir, lluvia, fotomultas, vehiculo, ruta, encuadrar, centro,
+ * acercar, girable, girar, invalidar }.
  */
 export function crearMapa(contenedor, { vista, alElegir, alMover, alTocar = () => {}, alArrastrar = () => {} }) {
   const mapa = L.map(contenedor, {
@@ -76,10 +78,11 @@ export function crearMapa(contenedor, { vista, alElegir, alMover, alTocar = () =
       [5.4, -76.4],
       [7.1, -74.7],
     ],
+    // Sin controles propios de Leaflet: el mapa puede girar (ver `girar`) y los botones no deben
+    // girar con él, así que el zoom y los créditos los pone la página, fuera del mapa.
     zoomControl: false,
+    attributionControl: false,
   });
-  L.control.zoom({ position: 'topright', zoomInTitle: 'Acercar', zoomOutTitle: 'Alejar' }).addTo(mapa);
-  mapa.attributionControl.setPrefix(false);
 
   mapa.createPane('lluvia').style.zIndex = 350;
   const panelNombres = mapa.createPane('nombres');
@@ -94,7 +97,6 @@ export function crearMapa(contenedor, { vista, alElegir, alMover, alTocar = () =
   L.tileLayer(`${ESRI}/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}`, {
     maxNativeZoom: 16,
     maxZoom: 17,
-    attribution: 'Esri, HERE, Garmin, © OpenStreetMap · radar y pluviómetros: SIATA',
   }).addTo(mapa);
   L.tileLayer(`${ESRI}/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}`, {
     pane: 'nombres',
@@ -187,7 +189,7 @@ export function crearMapa(contenedor, { vista, alElegir, alMover, alTocar = () =
     const datos = marcadores.get(id);
     if (!datos) return;
     const punto = datos.marcador.getLatLng();
-    if (!mapa.getBounds().pad(-0.15).contains(punto)) mapa.panTo(punto);
+    if (!limitesVisibles().pad(-0.15).contains(punto)) mapa.panTo(punto);
   }
 
   // -------------------------------------------------------------------------
@@ -239,12 +241,19 @@ export function crearMapa(contenedor, { vista, alElegir, alMover, alTocar = () =
   // Fotomultas
   // -------------------------------------------------------------------------
   let capaFotomultas = null;
+  let versionFotomultas = 0;
 
   /**
    * Muestra u oculta las cámaras de fotodetección. lista = [{ latitud, longitud, limite }];
    * `html(camara)` da el contenido del globo que se abre al tocar una.
    */
-  function fotomultas(lista, html) {
+  function fotomultas(lista, html, version = 0) {
+    if (capaFotomultas && version !== versionFotomultas) {
+      // llegó una lista nueva: se arma otra vez
+      capaFotomultas.remove();
+      capaFotomultas = null;
+    }
+    versionFotomultas = version;
     if (!lista) {
       if (capaFotomultas) capaFotomultas.remove();
       return;
@@ -309,6 +318,7 @@ export function crearMapa(contenedor, { vista, alElegir, alMover, alTocar = () =
     const figura = marcaVehiculo.getElement().querySelector('.vehiculo');
     figura.classList.toggle('sin-rumbo', posicion.rumbo == null);
     if (posicion.rumbo != null) {
+      // (dentro de un mapa girado la flecha gira con él: con el rumbo arriba queda apuntando arriba)
       giroVehiculo += ((posicion.rumbo - giroVehiculo + 540) % 360) - 180;
       figura.style.transform = `translate(-50%, -50%) rotate(${Math.round(giroVehiculo)}deg)`;
     }
@@ -316,6 +326,54 @@ export function crearMapa(contenedor, { vista, alElegir, alMover, alTocar = () =
       if (mapa.getZoom() < 15) mapa.setView(lugar, 16);
       else mapa.panTo(lugar, { animate: true, duration: 1, easeLinearity: 1 });
     }
+  }
+
+  // -------------------------------------------------------------------------
+  // Cargadores de carros eléctricos
+  // -------------------------------------------------------------------------
+  const capasPuntos = new Map(); // clave → { capa, version }
+
+  /**
+   * Muestra u oculta una capa de puntos con globo (cargadores, moteles…). `lista` = [{ latitud,
+   * longitud, … }] o null para ocultarla. `icono(p)` da el HTML de la marca, `titulo(p)` su
+   * texto, `html(p)` el globo, y `alIr(p)` se llama al tocar su botón «Ir aquí» (.globo-ir).
+   * Si cambia `version`, la capa se arma de nuevo (llegó otra lista o cambió el filtro).
+   */
+  function puntos(clave, lista, { icono, titulo, html, alIr }, version = 0) {
+    if (!capasPuntos.has(clave)) capasPuntos.set(clave, { capa: null, version: 0 });
+    const estado = capasPuntos.get(clave);
+    if (estado.capa && version !== estado.version) {
+      estado.capa.remove();
+      estado.capa = null;
+    }
+    estado.version = version;
+    if (!lista) {
+      if (estado.capa) estado.capa.remove();
+      return;
+    }
+    if (!estado.capa) {
+      estado.capa = L.layerGroup();
+      for (const punto of lista) {
+        const marca = L.marker([punto.latitud, punto.longitud], {
+          pane: 'fotomultas',
+          keyboard: false,
+          title: titulo(punto),
+          icon: L.divIcon({ className: 'marcador', html: icono(punto), iconSize: [0, 0] }),
+        }).bindPopup(() => html(punto), { className: 'globo', maxWidth: 270, offset: [0, -10] });
+        // Leaflet no deja salir del globo los clics: el botón se conecta al abrirlo
+        marca.on('popupopen', (evento) => {
+          const boton = evento.popup.getElement().querySelector('.globo-ir');
+          if (boton) {
+            boton.onclick = () => {
+              mapa.closePopup();
+              alIr(punto);
+            };
+          }
+        });
+        marca.addTo(estado.capa);
+      }
+    }
+    if (!mapa.hasLayer(estado.capa)) estado.capa.addTo(mapa);
   }
 
   let capaRuta = null;
@@ -342,15 +400,84 @@ export function crearMapa(contenedor, { vista, alElegir, alMover, alTocar = () =
 
   /** Acerca o aleja el mapa para que quepan todos los puntos [[lat, lon]]. */
   function encuadrar(puntos) {
-    if (puntos && puntos.length) mapa.fitBounds(L.latLngBounds(puntos), { padding: [48, 48], maxZoom: 16 });
+    if (!puntos || !puntos.length) return;
+    const [mx, my] = margen();
+    mapa.fitBounds(L.latLngBounds(puntos), { padding: [mx + 48, my + 48], maxZoom: 16 });
+  }
+
+  // -------------------------------------------------------------------------
+  // Giro del mapa (rumbo arriba)
+  // -------------------------------------------------------------------------
+  // Leaflet no gira mapas. Se gira el contenedor entero con CSS: para que al girar no queden
+  // esquinas vacías, el contenedor pasa a ser un cuadrado del tamaño de la diagonal de la
+  // caja visible, centrado en ella. Los puntos y globos se contragiran en el CSS (--giro).
+  // Con el mapa girado Leaflet no sabe convertir un toque en coordenadas, así que el zoom se
+  // hace alrededor del centro y quien arrastre o deba tocar un punto primero lo endereza.
+  const caja = contenedor.parentElement;
+  let esGirable = false;
+  let giro = 0; // grados acumulados
+
+  function medir() {
+    if (!esGirable) return;
+    const lado = Math.ceil(Math.hypot(caja.clientWidth, caja.clientHeight)) + 2;
+    if (contenedor.style.getPropertyValue('--lado') !== `${lado}px`) {
+      contenedor.style.setProperty('--lado', `${lado}px`);
+      mapa.invalidateSize();
+    }
+  }
+  if (window.ResizeObserver) new ResizeObserver(medir).observe(caja);
+
+  /** Lo que sobra del mapa a cada lado de la caja visible: [horizontal, vertical] en px. */
+  function margen() {
+    const tamano = mapa.getSize();
+    return [Math.max(0, (tamano.x - caja.clientWidth) / 2), Math.max(0, (tamano.y - caja.clientHeight) / 2)];
+  }
+
+  /** Límites geográficos de lo que se ve (sin lo que sobra del cuadrado). Vale sin giro. */
+  function limitesVisibles() {
+    const [mx, my] = margen();
+    const tamano = mapa.getSize();
+    return L.latLngBounds(mapa.containerPointToLatLng([mx, tamano.y - my]), mapa.containerPointToLatLng([tamano.x - mx, my]));
+  }
+
+  /** Prepara el mapa para poder girar (o lo devuelve a su tamaño normal). */
+  function girable(si) {
+    if (si === esGirable) return;
+    esGirable = si;
+    if (!si) girar(0, true);
+    contenedor.classList.toggle('girable', si);
+    if (si) medir();
+    else {
+      contenedor.style.removeProperty('--lado');
+      mapa.invalidateSize();
+    }
+  }
+
+  /** Gira el mapa para que `rumbo` (grados; 0 = norte) quede arriba. `yaMismo`: sin animación. */
+  function girar(rumbo, yaMismo = false) {
+    const destino = esGirable ? -rumbo : 0;
+    giro += ((destino - giro + 540) % 360) - 180; // por el lado corto
+    if (!esGirable) giro = 0;
+    contenedor.classList.toggle('sin-animar', yaMismo);
+    contenedor.style.setProperty('--giro', `${giro.toFixed(1)}deg`);
+    const girado = Math.abs(((giro % 360) + 360) % 360) > 0.5;
+    const modo = girado ? 'center' : true;
+    mapa.options.scrollWheelZoom = modo;
+    mapa.options.touchZoom = modo;
+    mapa.options.doubleClickZoom = modo;
+    return girado;
   }
 
   return {
+    acercar: (pasos) => mapa.setZoom(mapa.getZoom() + pasos),
+    girable,
+    girar,
     ponerCamaras,
     marcar,
     elegir,
     lluvia,
     fotomultas,
+    puntos,
     vehiculo,
     ruta,
     encuadrar,

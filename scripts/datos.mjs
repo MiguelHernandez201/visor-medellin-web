@@ -12,6 +12,9 @@
 //   datos/alertas.json        alertas vigentes para la ciudadanía
 //   datos/series/<cód>.json   nivel de las últimas 3 h de las estaciones que tienen cámara
 //   datos/umbrales.json       últimos umbrales conocidos de cada estación (cm)
+//   datos/fotomultas.json     cámaras de fotodetección de la Alcaldía (se renueva una vez al día)
+//   datos/cargadores.json     cargadores de carros eléctricos, de OpenStreetMap (una vez al día)
+//   datos/moteles.json        moteles, de OpenStreetMap (en la misma consulta)
 //   datos/estado.json         cuándo se generó y qué falló
 //
 // Los archivos son las respuestas del geoportal tal cual, salvo niveles.json, al que se le
@@ -23,6 +26,7 @@
 // datos/ antes de correr esto). Termina con error solo si fallan todas.
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { CAMARAS_SIATA } from '../src/siata.js';
+import { redDe } from '../src/redes-carga.js';
 
 const API = 'https://geoportal.siata.gov.co/fastgeoapi';
 const CARPETA = new URL('../datos/', import.meta.url);
@@ -119,6 +123,191 @@ if (respuestas['niveles.json']) {
   }
 }
 guardar('umbrales.json', umbrales);
+
+// Fotomultas: capa "Camaras_FDT" del servidor de mapas de la Alcaldía de Medellín. Cambia muy
+// de vez en cuando, así que se lee una vez al día; si falla o llega algo raro, queda la anterior.
+const FOTOMULTAS =
+  'https://www.medellin.gov.co/servidormapas/rest/services/transporte/VC_Infraest_Gestion_Transito/MapServer/3/query?where=1%3D1&outFields=*&outSR=4326&f=json';
+const SENTIDOS = {
+  'SUR-NORTE': 'sur a norte',
+  'NORTE-SUR': 'norte a sur',
+  'OCCIDENTE-ORIENTE': 'occidente a oriente',
+  'ORIENTE-OCCIDENTE': 'oriente a occidente',
+};
+
+/** Las cámaras de varios carriles de un mismo punto y sentido se juntan en una. */
+function leerFotomultas(json) {
+  const limpio = (texto) => String(texto || '').replace(/\s+/g, ' ').trim();
+  const marcada = (valor) => limpio(valor) !== '';
+  const grupos = new Map();
+  for (const { attributes: a } of json.features || []) {
+    const sentido = SENTIDOS[limpio(a.sentido).toUpperCase()];
+    const fuera = /^(NO |FUERA|INACTIV|SUSPEND)/i.test(limpio(a.operando));
+    if (!sentido || fuera || typeof a.latitud !== 'number' || typeof a.longitud !== 'number' || !(a.vel_max_k > 0)) continue;
+    // el nombre trae el sentido al final ("Don Quijote NORTE-SUR"): se le quita
+    let nombre = limpio(a.descripcion);
+    const cola = /[\s-]*\b(NORTE[- ]SUR|SUR[- ]NORTE|OCC-ORI|ORI-OCC|S-N|N-S)$/i;
+    while (cola.test(nombre)) nombre = nombre.replace(cola, ''); // a veces viene dos veces ("S-N SUR-NORTE")
+    nombre = nombre.replace(/^[\s-]+|[\s-]+$/g, '');
+    const clave = `${nombre}|${sentido}`;
+    if (!grupos.has(clave)) grupos.set(clave, []);
+    grupos.get(clave).push(a);
+  }
+  return [...grupos.entries()].map(([clave, lista]) => {
+    const [nombre, sentido] = clave.split('|');
+    const media = (campo) => Math.round((lista.reduce((suma, a) => suma + a[campo], 0) / lista.length) * 1e5) / 1e5;
+    const detecta = [['v', 'ev'], ['r', 'sr'], ['p', 'pyp']].filter(([, campo]) => lista.some((a) => marcada(a[campo]))).map(([letra]) => letra).join('');
+    return { nombre: nombre || limpio(lista[0].direccion), direccion: limpio(lista[0].direccion), sentido, limite: Math.round(lista[0].vel_max_k), latitud: media('latitud'), longitud: media('longitud'), detecta };
+  });
+}
+
+const fotomultasAntes = leerJson('fotomultas.json', null);
+const edadHoras = fotomultasAntes && fotomultasAntes.leido ? (Date.now() - Date.parse(fotomultasAntes.leido)) / 3600000 : Infinity;
+if (edadHoras < 20) {
+  estado.archivos['fotomultas.json'] = { ok: true, camaras: fotomultasAntes.camaras.length, leido: fotomultasAntes.leido };
+} else {
+  try {
+    const respuesta = await fetch(FOTOMULTAS, { headers: { 'User-Agent': 'Mozilla/5.0 (visor-medellin-web; relevo de datos)' }, signal: AbortSignal.timeout(30000) });
+    if (!respuesta.ok) throw new Error(`HTTP ${respuesta.status}`);
+    const camaras = leerFotomultas(await respuesta.json());
+    const enElValle = camaras.every((c) => c.latitud > 5.9 && c.latitud < 6.6 && c.longitud > -75.9 && c.longitud < -75.2);
+    if (camaras.length < 10 || !enElValle) throw new Error(`respuesta rara (${camaras.length} cámaras)`);
+    guardar('fotomultas.json', { leido: new Date().toISOString(), camaras });
+    estado.archivos['fotomultas.json'] = { ok: true, camaras: camaras.length };
+  } catch (error) {
+    estado.archivos['fotomultas.json'] = { ok: false, error: String(error.message || error) };
+  }
+}
+
+// Cargadores de carros eléctricos: OpenStreetMap (amenity=charging_station) en el Valle de
+// Aburrá y sus alrededores, por Overpass. Una vez al día; si falla, queda la lista anterior.
+const OVERPASS = 'https://overpass-api.de/api/interpreter';
+const ZONA = '(5.95,-75.75,6.55,-75.25)';
+const CONSULTA = `[out:json][timeout:60];(nwr["amenity"="charging_station"]${ZONA};nwr["amenity"="love_hotel"]${ZONA};nwr["tourism"="motel"]${ZONA};);out center tags;`;
+const CONECTORES = {
+  type2: 'Tipo 2',
+  type2_cable: 'Tipo 2',
+  type2_combo: 'CCS2',
+  type1: 'Tipo 1',
+  type1_combo: 'CCS1',
+  chademo: 'CHAdeMO',
+  tesla_supercharger: 'Tesla',
+  tesla_destination: 'Tesla',
+  nacs: 'NACS',
+  gb_dc: 'GB/T rápido',
+  gb_ac: 'GB/T',
+  schuko: 'Enchufe común',
+  nema_5_15: 'Enchufe común',
+  nema_5_20: 'Enchufe común',
+};
+
+/** kW de un texto como "50 kW", "7,4kW", "22000 W" o "150"; null si no se entiende. */
+function kilovatios(texto) {
+  const m = /([\d.,]+)\s*(kw|kva|w)?/i.exec(String(texto || ''));
+  if (!m) return null;
+  let valor = Number(m[1].replace(',', '.'));
+  if (!(valor > 0)) return null;
+  if ((m[2] || '').toLowerCase() === 'w') valor /= 1000;
+  return valor > 0 && valor <= 500 ? Math.round(valor * 10) / 10 : null;
+}
+
+function leerCargadores(json) {
+  const limpio = (texto) => String(texto || '').replace(/\s+/g, ' ').trim();
+  const lista = [];
+  for (const elemento of json.elements || []) {
+    const t = elemento.tags || {};
+    if (t.amenity !== 'charging_station') continue;
+    const latitud = elemento.lat ?? (elemento.center && elemento.center.lat);
+    const longitud = elemento.lon ?? (elemento.center && elemento.center.lon);
+    if (typeof latitud !== 'number' || typeof longitud !== 'number') continue;
+    if (['private', 'no'].includes(t.access)) continue; // los de uso privado no sirven en el mapa
+    if (t.disused === 'yes' || t.abandoned === 'yes') continue;
+    const operador = limpio(t.operator || t.network || t.brand);
+    const conectores = new Set();
+    let kw = kilovatios(t['charging_station:output']);
+    for (const [clave, valor] of Object.entries(t)) {
+      const m = /^socket:([a-z0-9_]+)(:output)?$/.exec(clave);
+      if (!m) continue;
+      if (m[2]) kw = Math.max(kw || 0, kilovatios(valor) || 0) || kw;
+      else if (valor !== 'no' && CONECTORES[m[1]]) conectores.add(CONECTORES[m[1]]);
+    }
+    const calle = limpio([t['addr:street'], t['addr:housenumber']].filter(Boolean).join(' '));
+    const nombre = limpio(t.name).replace(/^(punto|estaci[oó]n) de carga\s+/i, '') || operador || 'Cargador';
+    lista.push({
+      id: `${elemento.type[0].toUpperCase()}${elemento.id}`,
+      nombre,
+      red: redDe(t.name, t.operator, t.network, t.brand),
+      operador,
+      direccion: limpio([calle, t['addr:city']].filter(Boolean).join(', ')),
+      latitud: Math.round(latitud * 1e5) / 1e5,
+      longitud: Math.round(longitud * 1e5) / 1e5,
+      conectores: [...conectores],
+      kw: kw || null,
+      plazas: Number(t.capacity) > 0 ? Number(t.capacity) : null,
+      pago: t.fee === 'yes' ? true : t.fee === 'no' ? false : null,
+      horario: limpio(t.opening_hours) === '24/7' ? '24 horas' : limpio(t.opening_hours),
+    });
+  }
+  return lista;
+}
+
+function leerMoteles(json) {
+  const limpio = (texto) => String(texto || '').replace(/\s+/g, ' ').trim();
+  const lista = [];
+  for (const elemento of json.elements || []) {
+    const t = elemento.tags || {};
+    if (t.amenity !== 'love_hotel' && t.tourism !== 'motel') continue;
+    const latitud = elemento.lat ?? (elemento.center && elemento.center.lat);
+    const longitud = elemento.lon ?? (elemento.center && elemento.center.lon);
+    const nombre = limpio(t.name);
+    if (typeof latitud !== 'number' || typeof longitud !== 'number' || !nombre) continue;
+    if (t.disused === 'yes' || t.abandoned === 'yes') continue;
+    const calle = limpio([t['addr:street'], t['addr:housenumber']].filter(Boolean).join(' '));
+    lista.push({
+      id: `${elemento.type[0].toUpperCase()}${elemento.id}`,
+      nombre,
+      direccion: limpio([calle, t['addr:city']].filter(Boolean).join(', ')),
+      latitud: Math.round(latitud * 1e5) / 1e5,
+      longitud: Math.round(longitud * 1e5) / 1e5,
+      telefono: limpio(t.phone || t['contact:phone']),
+      web: limpio(t.website || t['contact:website']),
+    });
+  }
+  return lista;
+}
+
+const cargadoresAntes = leerJson('cargadores.json', null);
+const edadCargadores = cargadoresAntes && cargadoresAntes.leido ? (Date.now() - Date.parse(cargadoresAntes.leido)) / 3600000 : Infinity;
+if (edadCargadores < 20) {
+  estado.archivos['cargadores.json'] = { ok: true, cargadores: cargadoresAntes.cargadores.length, leido: cargadoresAntes.leido };
+} else {
+  try {
+    const respuesta = await fetch(OVERPASS, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': 'visor-medellin-web (relevo de datos; github.com/MiguelHernandez201/visor-medellin-web)',
+      },
+      body: `data=${encodeURIComponent(CONSULTA)}`,
+      signal: AbortSignal.timeout(70000),
+    });
+    if (!respuesta.ok) throw new Error(`HTTP ${respuesta.status}`);
+    const json = await respuesta.json();
+    const leido = new Date().toISOString();
+    const fuente = '© Colaboradores de OpenStreetMap (ODbL)';
+    const cargadores = leerCargadores(json);
+    const moteles = leerMoteles(json);
+    if (cargadores.length < 5 && moteles.length < 5) throw new Error(`respuesta rara (${cargadores.length} cargadores, ${moteles.length} moteles)`);
+    // `leido` marca la consulta: aunque una de las dos listas venga corta, no se repite hasta mañana
+    if (cargadores.length >= 5) guardar('cargadores.json', { leido, fuente, cargadores });
+    else guardar('cargadores.json', { ...(cargadoresAntes || { cargadores: [] }), leido });
+    if (moteles.length >= 5) guardar('moteles.json', { leido, fuente, moteles });
+    estado.archivos['cargadores.json'] = { ok: cargadores.length >= 5, cargadores: cargadores.length };
+    estado.archivos['moteles.json'] = { ok: moteles.length >= 5, moteles: moteles.length };
+  } catch (error) {
+    estado.archivos['cargadores.json'] = { ok: false, error: String(error.message || error) };
+  }
+}
 
 for (const [archivo, datos] of Object.entries(respuestas)) guardar(archivo, datos);
 guardar('estado.json', estado);

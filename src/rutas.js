@@ -128,7 +128,7 @@ function instruccion(paso) {
 
 /**
  * Ruta en carro entre dos puntos [latitud, longitud]. Devuelve
- * { puntos: [[lat, lon]], acumulado: [m], metros, segundos, pasos: [{ texto, desde, metros, segundos }] }
+ * { puntos: [[lat, lon]], acumulado: [m], metros, segundos, pasos: [{ texto, via, desde, metros, segundos }] }
  * (`desde` = metros desde el inicio hasta donde se hace la maniobra) o lanza un error.
  */
 export async function calcularRuta(origen, destino, senal) {
@@ -147,7 +147,7 @@ export async function calcularRuta(origen, destino, senal) {
   let total = 0;
   for (const tramo of datos.routes[0].legs) {
     for (const paso of tramo.steps) {
-      pasos.push({ texto: instruccion(paso), desde: total, metros: paso.distance, segundos: paso.duration });
+      pasos.push({ texto: instruccion(paso), via: paso.name || '', desde: total, metros: paso.distance, segundos: paso.duration });
       for (const [longitud, latitud] of paso.geometry.coordinates) {
         const punto = [latitud, longitud];
         const ultimo = puntos[puntos.length - 1];
@@ -210,6 +210,62 @@ export function seguirRuta(ruta, posicion) {
     else if (i === actual && p.metros > 0) segundos += p.segundos * Math.min(1, Math.max(0, (p.desde + p.metros - recorrido) / p.metros));
   });
   return { fuera, recorrido, restante, segundos, paso, metrosAlPaso };
+}
+
+/** Puntos repartidos por la ruta, uno cada `cada` metros: [{ latitud, longitud, desde }]. */
+export function muestrasDeRuta(ruta, cada = 250) {
+  const { puntos, acumulado } = ruta;
+  const muestras = [];
+  let siguiente = 0;
+  for (let i = 0; i < puntos.length - 1; i++) {
+    const largo = acumulado[i + 1] - acumulado[i];
+    while (siguiente <= acumulado[i + 1] && largo > 0) {
+      const t = Math.max(0, (siguiente - acumulado[i]) / largo);
+      muestras.push({
+        latitud: puntos[i][0] + (puntos[i + 1][0] - puntos[i][0]) * t,
+        longitud: puntos[i][1] + (puntos[i + 1][1] - puntos[i][1]) * t,
+        desde: siguiente,
+      });
+      siguiente += cada;
+    }
+  }
+  return muestras;
+}
+
+/** Nombre de la vía por la que va la ruta a `desde` metros del inicio ('' si no tiene). */
+export function viaEn(ruta, desde) {
+  let via = '';
+  for (const paso of ruta.pasos) {
+    if (paso.desde > desde) break;
+    if (paso.via) via = paso.via;
+  }
+  return via;
+}
+
+/**
+ * Los `lugares` ([{ latitud, longitud, … }]) que quedan a menos de `radio` metros del
+ * trazado, en orden de recorrido: [{ lugar, desde }].
+ */
+export function cercaDeRuta(ruta, lugares, radio = 60) {
+  const { puntos, acumulado } = ruta;
+  const hallados = [];
+  for (const lugar of lugares) {
+    const escala = Math.cos(lugar.latitud * RAD);
+    let mejor = null;
+    for (let i = 0; i < puntos.length - 1; i++) {
+      if (Math.abs(puntos[i][0] - lugar.latitud) > 0.005 || Math.abs(puntos[i][1] - lugar.longitud) > 0.005) continue;
+      const ax = puntos[i][1] * escala;
+      const ay = puntos[i][0];
+      const dx = puntos[i + 1][1] * escala - ax;
+      const dy = puntos[i + 1][0] - ay;
+      const largo = dx * dx + dy * dy;
+      const t = largo ? Math.min(1, Math.max(0, ((lugar.longitud * escala - ax) * dx + (lugar.latitud - ay) * dy) / largo)) : 0;
+      const d = Math.hypot(lugar.longitud * escala - (ax + dx * t), lugar.latitud - (ay + dy * t)) * RAD * 6371000;
+      if (d <= radio && (!mejor || d < mejor.d)) mejor = { d, desde: acumulado[i] + (acumulado[i + 1] - acumulado[i]) * t };
+    }
+    if (mejor) hallados.push({ lugar, desde: mejor.desde });
+  }
+  return hallados.sort((a, b) => a.desde - b.desde);
 }
 
 /**
