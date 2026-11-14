@@ -1056,6 +1056,39 @@ body.en-mapa .contenido {
   margin: 0;
 }
 
+/* Pestaña en el borde derecho del mapa: recoge o muestra el panel lateral */
+.boton-panel {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  z-index: 800;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 72px;
+  margin-top: -36px;
+  padding: 0;
+  border: 1px solid var(--borde);
+  border-right: 0;
+  border-radius: 12px 0 0 12px;
+  background: rgba(5, 7, 13, 0.88);
+  color: var(--texto-suave);
+  cursor: pointer;
+}
+
+.boton-panel:hover {
+  color: var(--acento);
+  border-color: var(--acento);
+}
+
+.vista-mapa.sin-panel {
+  grid-template-columns: 1fr;
+}
+
+.vista-mapa.sin-panel .panel {
+  display: none;
+}
+
 .mapa-leyenda {
   position: absolute;
   left: 12px;
@@ -2142,6 +2175,15 @@ body.en-mapa .contenido {
   .boton-ruta {
     top: 152px;
     left: 8px;
+  }
+
+  /* en el celular el panel es una hoja que sale sola: no hay nada que recoger */
+  .boton-panel {
+    display: none;
+  }
+
+  .vista-mapa.sin-panel .panel.abierto {
+    display: block;
   }
 
   .boton-ubicar {

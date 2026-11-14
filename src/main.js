@@ -298,6 +298,7 @@ app.innerHTML = `
         </div>
         <button class="boton-fotomultas" type="button" aria-pressed="false" title="Cámaras de fotodetección de la Secretaría de Movilidad"><span class="fotomulta">60</span><span>Fotomultas</span></button>
         <button class="boton-aviso" type="button" aria-pressed="false" title="Suena al acercarte a una fotomulta (usa el GPS)">${ICONOS.campana}<span>Aviso sonoro</span></button>
+        <button class="boton-panel" type="button" aria-expanded="true"></button>
         <button class="boton-ruta" type="button" aria-pressed="false" title="Buscar una ruta en carro">${ICONOS.ruta}<span>Ruta</span></button>
         <button class="boton-icono boton-ubicar" type="button" aria-pressed="false" aria-label="Ver mi carro en el mapa" title="Ver mi carro en el mapa">${ICONOS.ubicar}</button>
         <span class="nota-ubicacion" hidden></span>
@@ -416,6 +417,7 @@ const capasEl = $('.capas-lluvia');
 const botonFotomultasEl = $('.boton-fotomultas');
 const botonAvisoEl = $('.boton-aviso');
 const botonRutaEl = $('.boton-ruta');
+const botonPanelEl = $('.boton-panel');
 const botonUbicarEl = $('.boton-ubicar');
 const notaUbicacionEl = $('.nota-ubicacion');
 const guiaEl = $('.guia');
@@ -686,6 +688,7 @@ function elegirEnMapa(id) {
     return;
   }
   rutaAbierta = false;
+  mostrarPanel(true);
   elegida = id;
   mapa.elegir(id);
   revisarFoto(id);
@@ -773,6 +776,27 @@ function pintarFotomultas() {
   botonFotomultasEl.setAttribute('aria-pressed', String(verFotomultas));
   $('.leyenda-fotomulta').hidden = !verFotomultas;
 }
+
+// El panel de la derecha del mapa se puede recoger para ver el mapa a todo lo ancho (se
+// recuerda). En el celular no aplica: allí el panel solo sale cuando hay algo que mostrar.
+let verPanel = leerPreferencia('panelMapa', true);
+
+function mostrarPanel(ver) {
+  if (ver !== verPanel) {
+    verPanel = ver;
+    guardarPreferencia('panelMapa', ver);
+  }
+  vistaMapaEl.classList.toggle('sin-panel', !ver);
+  botonPanelEl.innerHTML = ver ? ICONOS.siguiente : ICONOS.anterior;
+  botonPanelEl.setAttribute('aria-expanded', String(ver));
+  const texto = ver ? 'Ocultar el panel' : 'Mostrar el panel';
+  botonPanelEl.setAttribute('aria-label', texto);
+  botonPanelEl.title = texto;
+  if (mapa) requestAnimationFrame(() => mapa.invalidar()); // el mapa cambió de ancho
+}
+
+botonPanelEl.addEventListener('click', () => mostrarPanel(!verPanel));
+mostrarPanel(verPanel);
 
 // Aviso sonoro al acercarse a una fotomulta (avisos.js). La franja se ve en todas las pestañas.
 const avisos = crearAvisos({ camaras: FOTOMULTAS, alCambiar: pintarAviso });
@@ -907,6 +931,7 @@ function fijarDestino(lugar) {
   llegada = false;
   eligiendoDestino = false;
   rutaAbierta = true;
+  mostrarPanel(true);
   rutaBusquedaEl.value = lugar.nombre;
   mapa.ruta(null, [lugar.latitud, lugar.longitud]);
   calcularRuta();
@@ -1050,6 +1075,7 @@ function pintarRuta() {
 
 function abrirRuta(abrir) {
   rutaAbierta = abrir;
+  if (abrir) mostrarPanel(true);
   eligiendoDestino = false;
   pintarPanel();
   if (abrir && !destino && matchMedia('(min-width: 721px)').matches) rutaBusquedaEl.focus();
