@@ -12,7 +12,9 @@ export { REDES, redDe, nombreRed } from './redes-carga.js';
 
 /**
  * La lista vigente (siempre el mismo arreglo). Cada cargador:
- * { id, nombre, red, operador, direccion, latitud, longitud, conectores: [texto], kw, plazas, pago, horario }
+ * { id, nombre, red, operador, direccion, latitud, longitud, conectores: [texto],
+ *   tomas: [{ tipo, corriente: 'DC' | 'AC' | 'AC trifásica' | '', kw, cantidad }],
+ *   kw, plazas, pago, costo, acceso, estado, verificado: 'AAAA-MM-DD', horario }
  */
 export const CARGADORES = [
   ["N13009989241", "Audi Colwagen (Medellín)", "Avenida Calle 10, Medellín", 6.21425, -75.58103],
@@ -41,9 +43,14 @@ export const CARGADORES = [
   latitud,
   longitud,
   conectores: [],
+  tomas: [],
   kw: null,
   plazas: null,
   pago: null,
+  costo: '',
+  acceso: '',
+  estado: '',
+  verificado: '',
   horario: '',
 }));
 
@@ -63,9 +70,23 @@ const fuente = fuenteJson('cargadores.json', 6 * 60 * 60 * 1000, (json) => {
       latitud: c.latitud,
       longitud: c.longitud,
       conectores: Array.isArray(c.conectores) ? c.conectores.map(String) : [],
+      tomas: Array.isArray(c.tomas)
+        ? c.tomas
+            .filter((t) => t && t.tipo)
+            .map((t) => ({
+              tipo: String(t.tipo),
+              corriente: String(t.corriente || ''),
+              kw: t.kw > 0 ? t.kw : null,
+              cantidad: t.cantidad > 0 ? t.cantidad : null,
+            }))
+        : [],
       kw: c.kw > 0 ? c.kw : null,
       plazas: c.plazas > 0 ? c.plazas : null,
       pago: typeof c.pago === 'boolean' ? c.pago : null,
+      costo: String(c.costo || ''),
+      acceso: String(c.acceso || ''),
+      estado: String(c.estado || ''),
+      verificado: String(c.verificado || ''),
       horario: String(c.horario || ''),
     })),
   );

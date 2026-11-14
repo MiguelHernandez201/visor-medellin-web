@@ -202,6 +202,43 @@ const CONECTORES = {
   nema_5_20: 'Enchufe común',
 };
 
+// Tomas de OpenStreetMap que son de corriente continua (carga rápida)
+const CONECTORES_DC = ['type2_combo', 'type1_combo', 'chademo', 'tesla_supercharger', 'gb_dc'];
+const TIPOS_DC = ['CCS1', 'CCS2', 'CHAdeMO', 'GB/T rápido'];
+
+/**
+ * Junta las tomas iguales (mismo tipo, corriente y potencia) sumando cuántas hay. Cada toma:
+ * { tipo, corriente: 'DC' | 'AC' | 'AC trifásica' | '', kw, cantidad }.
+ */
+function agruparTomas(tomas) {
+  const grupos = new Map();
+  for (const toma of tomas) {
+    const clave = `${toma.tipo}|${toma.corriente}|${toma.kw}`;
+    const igual = grupos.get(clave);
+    if (!igual) grupos.set(clave, { ...toma });
+    else igual.cantidad = igual.cantidad && toma.cantidad ? igual.cantidad + toma.cantidad : igual.cantidad || toma.cantidad;
+  }
+  // primero las rápidas (más kW)
+  return [...grupos.values()].sort((a, b) => (b.kw || 0) - (a.kw || 0));
+}
+
+/**
+ * Costo en un texto parejo: «1700», «1800 kwh», «$1650/kWh» o «1300 COP/kWh» → «$1.700 por kWh»;
+ * «0» o «gratis» → «Gratis». Lo que no se entienda queda como llegó.
+ */
+function textoCosto(texto) {
+  const limpio = String(texto || '').replace(/\s+/g, ' ').trim();
+  if (!limpio) return '';
+  if (/gratis|free|sin costo/i.test(limpio)) return 'Gratis';
+  const m = /^\$?\s*(\d{1,3}(?:[.,]\d{3})+|\d+)(?:[.,]\d+)?\s*(cop|pesos)?\s*(?:\/|por|x)?\s*(kwh)?$/i.exec(limpio);
+  if (!m) return limpio;
+  const valor = Number(m[1].replace(/[.,]/g, ''));
+  if (valor === 0) return 'Gratis';
+  // sin unidad: en Colombia los precios por kWh van de unos cientos a unos miles de pesos
+  if (m[3] || (valor >= 200 && valor <= 5000)) return `$${valor.toLocaleString('es-CO')} por kWh`;
+  return limpio;
+}
+
 /** kW de un texto como "50 kW", "7,4kW", "22000 W" o "150"; null si no se entiende. */
 function kilovatios(texto) {
   const m = /([\d.,]+)\s*(kw|kva|w)?/i.exec(String(texto || ''));
@@ -225,12 +262,21 @@ function leerCargadores(json) {
     if (t.disused === 'yes' || t.abandoned === 'yes') continue;
     const operador = limpio(t.operator || t.network || t.brand);
     const conectores = new Set();
+    const tomas = [];
     let kw = kilovatios(t['charging_station:output']);
     for (const [clave, valor] of Object.entries(t)) {
       const m = /^socket:([a-z0-9_]+)(:output)?$/.exec(clave);
       if (!m) continue;
       if (m[2]) kw = Math.max(kw || 0, kilovatios(valor) || 0) || kw;
-      else if (valor !== 'no' && CONECTORES[m[1]]) conectores.add(CONECTORES[m[1]]);
+      else if (valor !== 'no' && CONECTORES[m[1]]) {
+        conectores.add(CONECTORES[m[1]]);
+        tomas.push({
+          tipo: CONECTORES[m[1]],
+          corriente: CONECTORES_DC.includes(m[1]) ? 'DC' : m[1] === 'nacs' ? '' : 'AC',
+          kw: kilovatios(t[`socket:${m[1]}:output`]),
+          cantidad: Number(valor) > 0 ? Number(valor) : null,
+        });
+      }
     }
     const calle = limpio([t['addr:street'], t['addr:housenumber']].filter(Boolean).join(' '));
     const nombre = limpio(t.name).replace(/^(punto|estaci[oó]n) de carga\s+/i, '') || operador || 'Cargador';
@@ -243,9 +289,14 @@ function leerCargadores(json) {
       latitud: Math.round(latitud * 1e5) / 1e5,
       longitud: Math.round(longitud * 1e5) / 1e5,
       conectores: [...conectores],
+      tomas: agruparTomas(tomas),
       kw: kw || null,
       plazas: Number(t.capacity) > 0 ? Number(t.capacity) : null,
       pago: t.fee === 'yes' ? true : t.fee === 'no' ? false : null,
+      costo: textoCosto(t.charge),
+      acceso: t.access === 'customers' ? 'Solo para clientes' : '',
+      estado: '',
+      verificado: '',
       horario: limpio(t.opening_hours) === '24/7' ? '24 horas' : limpio(t.opening_hours),
     });
   }
@@ -300,6 +351,9 @@ const OCM_CONECTORES = {
 const OCM_PRIVADO = [2, 3, 6]; // UsageType: privado, o solo para clientes con aviso
 const OCM_FUERA = [100, 150, 200, 210]; // StatusType: no funciona, planeado, retirado, duplicado
 const OCM_OPERADORES = { 23: 'Tesla', 3304: 'Celsia', 3705: 'Terpel Voltex' }; // el 1 es «desconocido»
+const OCM_CORRIENTE = { 10: 'AC', 20: 'AC trifásica', 30: 'DC' };
+const OCM_ACCESO = { 1: 'Público', 4: 'Público · requiere cuenta o app', 5: 'Público · se paga en el sitio', 7: 'Público · con aviso previo' };
+const OCM_ESTADO = { 10: 'Disponible', 20: 'En uso', 30: 'Fuera de servicio por ahora', 50: 'Funciona', 75: 'Funciona en parte' };
 
 function leerOpenChargeMap(json) {
   const limpio = (texto) => String(texto || '').replace(/\s+/g, ' ').trim();
@@ -322,9 +376,27 @@ function leerOpenChargeMap(json) {
       latitud: Math.round(a.Latitude * 1e5) / 1e5,
       longitud: Math.round(a.Longitude * 1e5) / 1e5,
       conectores: [...new Set(conexiones.map((c) => OCM_CONECTORES[c.ConnectionTypeID]).filter(Boolean))],
+      tomas: agruparTomas(
+        conexiones
+          .filter((c) => OCM_CONECTORES[c.ConnectionTypeID])
+          .map((c) => {
+            const tipo = OCM_CONECTORES[c.ConnectionTypeID];
+            return {
+              tipo,
+              // los CCS, CHAdeMO y GB/T rápido siempre son DC aunque la ficha diga otra cosa
+              corriente: TIPOS_DC.includes(tipo) ? 'DC' : OCM_CORRIENTE[c.CurrentTypeID] || '',
+              kw: c.PowerKW > 0 && c.PowerKW <= 500 ? Math.round(c.PowerKW * 10) / 10 : null,
+              cantidad: c.Quantity > 0 ? c.Quantity : null,
+            };
+          }),
+      ),
       kw: kw ? Math.round(kw * 10) / 10 : null,
       plazas: p.NumberOfPoints > 0 ? p.NumberOfPoints : null,
       pago: /gratis|free|sin costo|^0\b/i.test(costo) ? false : costo || p.UsageTypeID === 5 ? true : null,
+      costo: textoCosto(costo),
+      acceso: OCM_ACCESO[p.UsageTypeID] || '',
+      estado: OCM_ESTADO[p.StatusTypeID] || '',
+      verificado: /^\d{4}-\d{2}-\d{2}/.test(p.DateLastVerified || '') ? p.DateLastVerified.slice(0, 10) : '',
       horario: '',
     });
   }
@@ -341,7 +413,7 @@ const nombreBase = (texto) =>
   texto
     .toLowerCase()
     .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/\p{Diacritic}/gu, '')
     .replace(/\b(terpel|voltex|celsia|epm|enel x?|evsy|tesla|supercharger|eds|estacion|cargador|de|del|la|el)\b/g, ' ')
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
@@ -353,8 +425,10 @@ const nombreBase = (texto) =>
  * lo ubican distinto). Entonces se completa lo que le falte (red, conectores…).
  */
 function combinarCargadores(osm, ocm) {
-  const lista = osm.map((c) => ({ ...c, conectores: [...c.conectores] }));
-  for (const c of ocm) {
+  // las listas guardadas antes de las tomas no traen esos campos
+  const completo = (c) => ({ tomas: [], costo: '', acceso: '', estado: '', verificado: '', ...c, conectores: [...(c.conectores || [])] });
+  const lista = osm.map(completo);
+  for (const c of ocm.map(completo)) {
     const igual = lista.find((o) => {
       const distancia = metros(o, c);
       if (distancia < (o.id.startsWith('C') ? 50 : 150)) return true;
@@ -369,9 +443,16 @@ function combinarCargadores(osm, ocm) {
     igual.operador ||= c.operador;
     igual.direccion ||= c.direccion;
     igual.conectores = [...new Set([...igual.conectores, ...c.conectores])];
+    // las tomas de una sola fuente (no se mezclan): las que traigan la potencia
+    const conKw = (tomas) => tomas.some((t) => t.kw);
+    if (!igual.tomas.length || (!conKw(igual.tomas) && conKw(c.tomas))) igual.tomas = c.tomas;
     igual.kw = Math.max(igual.kw || 0, c.kw || 0) || null;
     igual.plazas ??= c.plazas;
     igual.pago ??= c.pago;
+    igual.costo ||= c.costo;
+    igual.acceso ||= c.acceso;
+    igual.estado ||= c.estado;
+    igual.verificado ||= c.verificado;
   }
   return lista.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
 }
@@ -382,7 +463,10 @@ const textoError = (motivo) => String((motivo && motivo.message) || motivo);
 const cargadoresAntes = leerJson('cargadores.json', null);
 const edadCargadores = cargadoresAntes && cargadoresAntes.leido ? (Date.now() - Date.parse(cargadoresAntes.leido)) / 3600000 : Infinity;
 const claveOcm = process.env.OPENCHARGEMAP_KEY;
-if (edadCargadores < 20) {
+// Sube cuando cambian los campos de cada cargador: una lista de un formato anterior se renueva ya
+const FORMATO_CARGADORES = 2;
+const formatoViejo = !cargadoresAntes || cargadoresAntes.formato !== FORMATO_CARGADORES;
+if (edadCargadores < 20 && !formatoViejo) {
   estado.archivos['cargadores.json'] = { ok: true, cargadores: cargadoresAntes.cargadores.length, leido: cargadoresAntes.leido };
 } else {
   const leido = new Date().toISOString();
@@ -426,7 +510,7 @@ if (edadCargadores < 20) {
   const cargadores = combinarCargadores((fuentes.osm && fuentes.osm.lista) || [], (fuentes.ocm && fuentes.ocm.lista) || []);
   const fuente = ['© Colaboradores de OpenStreetMap (ODbL)', fuentes.ocm && 'Open Charge Map (CC BY 4.0)'].filter(Boolean).join(' · ');
   // `leido` marca la consulta: aunque una fuente falle, no se repite hasta mañana
-  if (cargadores.length >= 5) guardar('cargadores.json', { leido, fuente, cargadores, fuentes });
+  if (cargadores.length >= 5) guardar('cargadores.json', { formato: FORMATO_CARGADORES, leido, fuente, cargadores, fuentes });
   else if (cargadoresAntes) guardar('cargadores.json', { ...cargadoresAntes, leido });
   estado.archivos['cargadores.json'] = {
     ok: cargadores.length >= 5 && !Object.keys(errores).length,

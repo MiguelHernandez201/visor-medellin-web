@@ -338,9 +338,10 @@ export function crearMapa(contenedor, { vista, alElegir, alMover, alTocar = () =
    * Muestra u oculta una capa de puntos con globo (cargadores, moteles…). `lista` = [{ latitud,
    * longitud, … }] o null para ocultarla. `icono(p)` da el HTML de la marca, `titulo(p)` su
    * texto, `html(p)` el globo, y `alIr(p)` se llama al tocar su botón «Ir aquí» (.globo-ir).
+   * `ancho` es el máximo del globo y `clase` una clase más para darle estilo propio.
    * Si cambia `version`, la capa se arma de nuevo (llegó otra lista o cambió el filtro).
    */
-  function puntos(clave, lista, { icono, titulo, html, alIr }, version = 0) {
+  function puntos(clave, lista, { icono, titulo, html, alIr, ancho = 270, clase = '' }, version = 0) {
     if (!capasPuntos.has(clave)) capasPuntos.set(clave, { capa: null, version: 0 });
     const estado = capasPuntos.get(clave);
     if (estado.capa && version !== estado.version) {
@@ -360,7 +361,7 @@ export function crearMapa(contenedor, { vista, alElegir, alMover, alTocar = () =
           keyboard: false,
           title: titulo(punto),
           icon: L.divIcon({ className: 'marcador', html: icono(punto), iconSize: [0, 0] }),
-        }).bindPopup(() => html(punto), { className: 'globo', maxWidth: 270, offset: [0, -10] });
+        }).bindPopup(() => html(punto), { className: `globo ${clase}`.trim(), maxWidth: ancho, minWidth: Math.min(ancho, 240), offset: [0, -10] });
         // Leaflet no deja salir del globo los clics: el botón se conecta al abrirlo
         marca.on('popupopen', (evento) => {
           const boton = evento.popup.getElement().querySelector('.globo-ir');

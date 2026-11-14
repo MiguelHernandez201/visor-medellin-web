@@ -1516,6 +1516,131 @@ body.en-mapa .contenido {
   color: inherit;
 }
 
+/* Globo de un cargador: una tarjeta por tipo de toma (dibujo, nombre, corriente y kW) y los datos */
+.globo-cargador .leaflet-popup-content {
+  gap: 8px;
+}
+
+.globo-cargador .leaflet-popup-content strong {
+  padding-right: 18px; /* que no choque con la X */
+  font-size: 1rem;
+}
+
+.globo-cargador .globo-red {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: -4px;
+}
+
+.globo-cargador .globo-red .cargador {
+  width: 18px;
+  height: 18px;
+  border-width: 1px;
+  border-radius: 5px;
+}
+
+.globo-cargador .globo-red .cargador svg {
+  width: 11px;
+  height: 11px;
+}
+
+.globo-cargador .tomas {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.globo-cargador .toma {
+  display: grid;
+  grid-template-columns: 34px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  background: var(--superficie-2);
+}
+
+.globo-cargador .toma-dibujo {
+  display: grid;
+  place-items: center;
+  color: #5fe0a8;
+}
+
+.globo-cargador .toma-dibujo svg {
+  width: 32px;
+  height: 32px;
+}
+
+.globo-cargador .toma-texto {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.globo-cargador .toma-texto b {
+  color: var(--texto);
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.globo-cargador .toma small {
+  color: var(--texto-suave);
+  font-size: 0.78rem;
+}
+
+.globo-cargador .toma-kw {
+  display: grid;
+  justify-items: end;
+  line-height: 1;
+}
+
+.globo-cargador .toma-kw b {
+  color: #5fe0a8;
+  font-size: 1.35rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.globo-cargador .toma-kw small {
+  margin-top: 2px;
+  color: #5fe0a8;
+  font-weight: 700;
+}
+
+.globo-cargador .globo-datos {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.globo-cargador .globo-datos dt {
+  color: var(--texto-suave);
+}
+
+.globo-cargador .globo-datos dd {
+  margin: 0;
+  color: var(--texto);
+  overflow-wrap: anywhere;
+}
+
+.globo-cargador .globo-datos .estado-bien {
+  color: var(--nivel-1);
+}
+
+.globo-cargador .globo-datos .estado-medio {
+  color: var(--nivel-2);
+}
+
+.globo-cargador .globo-datos .estado-mal {
+  color: var(--rojo);
+}
+
 .ruta-cargador {
   align-self: flex-start;
   justify-self: start;

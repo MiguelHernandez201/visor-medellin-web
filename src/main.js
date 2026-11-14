@@ -49,6 +49,7 @@ import { crearUtilidades } from './utilidades.js';
 import { FOTOMULTAS, revisarFotomultas, alActualizarFotomultas } from './fotomultas.js';
 import { CARGADORES, REDES, nombreRed, revisarCargadores, alActualizarCargadores } from './cargadores.js';
 import { MOTELES, revisarMoteles, alActualizarMoteles } from './moteles.js';
+import { dibujoConector, NOMBRES_CONECTOR } from './conectores.js';
 import { crearAvisos } from './avisos.js';
 import { crearUbicacion } from './ubicacion.js';
 import {
@@ -959,22 +960,41 @@ filtrosMapaEl.addEventListener('click', (evento) => {
   aplicarFiltros();
 });
 
-/** Globo de un cargador: red, lugar, conectores, potencia y botón para trazar la ruta. */
+/** Globo de un cargador: red, cada tipo de toma con su dibujo y potencia, acceso, costo y botón para trazar la ruta. */
 function htmlCargador(c) {
   const red = c.red === 'otra' && c.operador ? c.operador : nombreRed(c.red);
   const operador = c.operador && c.red !== 'otra' && !new RegExp(c.operador, 'i').test(red) ? ` · ${c.operador}` : '';
-  const datos = [];
-  if (c.conectores.length) datos.push(c.conectores.join(', '));
-  if (c.kw) datos.push(`hasta ${String(c.kw).replace('.', ',')} kW`);
-  if (c.plazas) datos.push(c.plazas === 1 ? '1 puesto' : `${c.plazas} puestos`);
-  const extra = [];
-  if (c.pago != null) extra.push(c.pago ? 'De pago' : 'Gratis');
-  if (c.horario) extra.push(c.horario);
+  const numero = (n) => String(n).replace('.', ',');
+  // sin el detalle de cada toma (cargadores viejos o de OpenStreetMap sin etiquetas) se usan los tipos sueltos
+  const tomas = c.tomas.length ? c.tomas : c.conectores.map((tipo) => ({ tipo, corriente: '', kw: null, cantidad: null }));
+  const corriente = { DC: 'DC · carga rápida', AC: 'AC', 'AC trifásica': 'AC trifásica' };
+  const htmlTomas = tomas
+    .map((t) => {
+      const detalle = [corriente[t.corriente], t.cantidad && (t.cantidad === 1 ? '1 toma' : `${t.cantidad} tomas`)].filter(Boolean).join(' · ');
+      return `<li class="toma">
+        <span class="toma-dibujo">${dibujoConector(t.tipo)}</span>
+        <span class="toma-texto"><b>${escapar(NOMBRES_CONECTOR[t.tipo] || t.tipo)}</b>${detalle ? `<small>${escapar(detalle)}</small>` : ''}</span>
+        ${t.kw ? `<span class="toma-kw"><b>${numero(t.kw)}</b><small>kW</small></span>` : ''}
+      </li>`;
+    })
+    .join('');
+  const filas = [];
+  const fila = (nombre, valor, clase = '') => valor && filas.push(`<dt>${nombre}</dt><dd${clase ? ` class="${clase}"` : ''}>${escapar(valor)}</dd>`);
+  fila('Dirección', c.direccion);
+  fila('Acceso', c.acceso);
+  fila('Costo', c.costo || (c.pago == null ? '' : c.pago ? 'De pago' : 'Gratis'));
+  fila('Horario', c.horario);
+  fila('Puestos', c.plazas && String(c.plazas));
+  if (!c.tomas.length && c.kw) fila('Potencia', `Hasta ${numero(c.kw)} kW`);
+  fila('Estado', c.estado, /fuera|no funciona/i.test(c.estado) ? 'estado-mal' : /parte|uso/i.test(c.estado) ? 'estado-medio' : 'estado-bien');
+  if (c.verificado) {
+    const fecha = new Date(`${c.verificado}T12:00:00`);
+    if (!Number.isNaN(fecha.getTime())) fila('Verificado', fecha.toLocaleDateString('es-CO', { month: 'long', year: 'numeric' }));
+  }
   return `<strong>${escapar(c.nombre)}</strong>
-    <span>${escapar(red + operador)}</span>
-    ${c.direccion ? `<span>${escapar(c.direccion)}</span>` : ''}
-    ${datos.length ? `<span class="globo-limite">${escapar(datos.join(' · '))}</span>` : ''}
-    ${extra.length ? `<span>${escapar(extra.join(' · '))}</span>` : ''}
+    <span class="globo-red"><span class="cargador red-${c.red}">${ICONOS.rayo}</span>${escapar(red + operador)}</span>
+    ${htmlTomas ? `<ul class="tomas">${htmlTomas}</ul>` : '<span>Sin datos de los conectores</span>'}
+    ${filas.length ? `<dl class="globo-datos">${filas.join('')}</dl>` : ''}
     <button class="boton boton-principal globo-ir" type="button">${ICONOS.ruta}<span>Ir aquí</span></button>`;
 }
 
@@ -991,6 +1011,8 @@ function pintarCargadores() {
       titulo: (c) => `Cargador · ${c.nombre}`,
       html: htmlCargador,
       alIr: (c) => fijarDestino(destinoCargador(c)),
+      ancho: 320,
+      clase: 'globo-cargador',
     },
     versionCargadores,
   );
