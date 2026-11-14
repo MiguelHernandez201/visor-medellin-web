@@ -8,7 +8,7 @@ Versión web del [Visor Medellín para LG webOS TV](https://github.com/MiguelHer
 
 ## Qué hace
 
-- **Tres secciones**: **Mapa** (la primera y con la que abre la app), **Ver cámaras** —con las subopciones **Tránsito** (80 cámaras del SIMM), **SIATA** (deprimidos viales, panorámicas y cámaras de cielo) y **Ríos** (72 cámaras del río Medellín, quebradas y drenajes, de norte a sur)— y **Motor Tesla**. En el computador van arriba; en el celular, en una barra abajo, como en las apps.
+- **Cuatro secciones**: **Mapa** (la primera y con la que abre la app), **Ver cámaras** —con las subopciones **Tránsito** (80 cámaras del SIMM), **SIATA** (deprimidos viales, panorámicas y cámaras de cielo) y **Ríos** (72 cámaras del río Medellín, quebradas y drenajes, de norte a sur)—, **Motor Tesla** y **Utilidades**. En el computador van arriba; en el celular, en una barra abajo, como en las apps.
 - **Tarjetas con la foto** de cada cámara, en una grilla que se adapta al ancho (2 columnas en el celular). Solo se renuevan las que están a la vista.
 - **Búsqueda y filtros**: por nombre o dirección, *Favoritas*, *Con lluvia* y, en Ríos, *En alerta*.
 - **Lluvia en cada cámara**: etiqueta de llovizna, ligera, moderada o fuerte, del radar del SIATA (sin falsos ecos) confirmado con los pluviómetros a menos de 2,5 km.
@@ -27,6 +27,7 @@ Versión web del [Visor Medellín para LG webOS TV](https://github.com/MiguelHer
 - **Lluvia en la ruta**: el resumen dice si llueve en el recorrido según el radar (qué tan fuerte, dónde empieza y cuánto tramo) y lo repite la guía al manejar.
 - **Cargadores para carros eléctricos**: capa del mapa con los cargadores públicos, cada uno con el color de su red (Terpel Voltex, Celsia, EPM, Enel X, Evsy, Tesla, centros comerciales y otras). Al tocar uno se ven la red, los conectores, la potencia y los puestos que estén registrados, y un botón **Ir aquí** que traza la ruta. También se pueden buscar por nombre o red, y el panel de rutas ofrece **Ir al cargador más cercano**. Los datos son de [OpenStreetMap](https://www.openstreetmap.org/copyright) (voluntarios; pueden faltar cargadores o detalles): el relevo los lee una vez al día. No muestra disponibilidad ni precios en vivo.
 - **Motor**: sonido de motor de gasolina para un carro eléctrico, generado en vivo (sin grabaciones) y que sigue la velocidad del GPS. Cinco motores (V8 americano, V8 deportivo, V12, bóxer 6 y 4 cilindros turbo), caja automática imaginaria con cambios, limitador y petardeo. **Prueba con pedales** (acelerador y freno, o ↑ ↓ en el teclado) y **Demostración** para oírlo sin moverse; **Acelerar en neutro** con el carro detenido. Ajustes: volumen, intensidad, carácter, petardeo, tono y volumen del silbido, km/h o mph y encender al abrir. La ubicación solo se usa para medir la velocidad y no sale del navegador. El motor sigue sonando al pasar a las otras secciones.
+- **Utilidades**: herramientas rápidas para tocar con el dedo. **Lanzar moneda** (cara o cruz); **Ruleta** con listas propias que se guardan (dónde comer, quién conduce…) y que se gira con el dedo; **Dados** (de 1 a 6) y **número al azar** entre dos valores; **Temporizador** con atajos de 5, 10, 15, 30 y 45 minutos, que suena al terminar y muestra lo que falta en la barra de arriba desde cualquier pestaña; **Cronómetro** con vueltas; **Reloj gigante** con modo noche y pantalla completa; **Launchpad** de 16 pads con sonidos generados en el navegador y una base de ritmo (dembow, house o rock) con tempo ajustable; y **Radio** con la transmisión en vivo de La Mega. El temporizador, el cronómetro, la radio y la base siguen andando al cambiar de pestaña.
 - **Clima y alertas**: temperatura del centro en la barra superior y franja roja si el SIATA tiene una alerta vigente.
 - **Se instala como app** (botón «Instalar» en Chrome/Edge/Android, «Añadir a pantalla de inicio» en Safari) y abre rápido gracias al service worker. Favoritas, sección, filtros y vista del mapa se recuerdan en el navegador.
 
@@ -34,7 +35,8 @@ Versión web del [Visor Medellín para LG webOS TV](https://github.com/MiguelHer
 
 | Acción | Ratón / táctil | Teclado |
 |---|---|---|
-| Cambiar de sección | Pestañas (arriba o abajo) | 1 a 3 |
+| Cambiar de sección | Pestañas (arriba o abajo) | 1 a 4 |
+| Lanzar la moneda, girar la ruleta o tirar los dados (Utilidades) | Tocar | Espacio |
 | Acelerar / frenar (Motor, modo de prueba) | Pedales en pantalla | ↑ / ↓ |
 | Buscar | Caja de búsqueda | `/` |
 | Ver una cámara en grande | Tocar la foto | Tab hasta la foto y Enter |
@@ -98,6 +100,8 @@ Para probar con datos locales: `npm run datos`, sirve la carpeta del proyecto y 
 | `src/rutas.js` | Búsqueda de lugares (Photon), ruta en carro (OSRM), indicaciones en español y seguimiento de la ruta |
 | `src/moteles.js` | Moteles (OpenStreetMap) |
 | `src/cargadores.js`, `src/redes-carga.js` | Cargadores de carros eléctricos (OpenStreetMap) y las redes que se distinguen |
+| `src/utilidades.js` | Sección Utilidades: moneda, ruleta, dados, temporizador, cronómetro, reloj y radio |
+| `src/pads.js` | Launchpad: sonidos de los pads y base de ritmo (Web Audio) |
 | `src/iconos.js` | Íconos SVG |
 | `src/app.css` | Estilos adaptables (celular, tableta, computador) |
 | `src/pwa.js` | Registro del service worker y botón «Instalar app» |

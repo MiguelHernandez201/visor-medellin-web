@@ -45,6 +45,7 @@ import { crearMapa } from './mapa.js';
 import { ICONOS } from './iconos.js';
 import { registrarServiceWorker, prepararInstalacion } from './pwa.js';
 import { crearMotor } from './motor.js';
+import { crearUtilidades } from './utilidades.js';
 import { FOTOMULTAS, revisarFotomultas, alActualizarFotomultas } from './fotomultas.js';
 import { CARGADORES, REDES, nombreRed, revisarCargadores, alActualizarCargadores } from './cargadores.js';
 import { MOTELES, revisarMoteles, alActualizarMoteles } from './moteles.js';
@@ -74,6 +75,7 @@ const NAVEGACION = [
   { id: 'mapa', titulo: 'Mapa', icono: ICONOS.mapa },
   { id: 'camaras', titulo: 'Ver cámaras', icono: ICONOS.camara },
   { id: 'motor', titulo: 'Motor Tesla', icono: ICONOS.motor },
+  { id: 'utilidades', titulo: 'Utilidades', icono: ICONOS.utilidades },
 ];
 const LISTAS = ['simm', 'siata', 'rios']; // las subopciones de «Ver cámaras»
 
@@ -83,6 +85,7 @@ const SECCIONES = [
   { id: 'rios', titulo: 'Ríos', largo: 'Ríos y quebradas', icono: ICONOS.rio },
   { id: 'mapa', titulo: 'Mapa', largo: 'Mapa', icono: ICONOS.mapa },
   { id: 'motor', titulo: 'Motor', largo: 'Motor', icono: ICONOS.motor },
+  { id: 'utilidades', titulo: 'Utilidades', largo: 'Utilidades', icono: ICONOS.utilidades },
 ];
 
 const MODOS_LLUVIA = [
@@ -291,6 +294,7 @@ app.innerHTML = `
       ).join('')}
     </nav>
     <div class="barra-derecha">
+      <button class="temporizador-chip" type="button" title="Temporizador" hidden></button>
       <span class="clima-centro" title="Temperatura en el centro de Medellín"></span>
       <button class="boton boton-instalar" type="button" hidden>${ICONOS.instalar}<span>Instalar</span></button>
     </div>
@@ -411,6 +415,7 @@ app.innerHTML = `
     </section>
 
     <section class="vista-motor" hidden></section>
+    <section class="vista-utilidades" hidden></section>
   </main>
 
   <div class="visor" role="dialog" aria-modal="true" aria-label="Cámara" tabindex="-1" hidden>
@@ -448,6 +453,8 @@ const alertaTextoEl = $('.alerta-texto');
 const vistaListaEl = $('.vista-lista');
 const vistaMapaEl = $('.vista-mapa');
 const vistaMotorEl = $('.vista-motor');
+const vistaUtilidadesEl = $('.vista-utilidades');
+const temporizadorChipEl = $('.temporizador-chip');
 const tituloSeccionEl = $('.titulo-seccion');
 const subseccionesEl = $('.subsecciones');
 const busquedaEl = $('.busqueda input');
@@ -485,6 +492,20 @@ const capaEl = $('.capa');
 // Secciones
 // ---------------------------------------------------------------------------
 const motor = crearMotor(vistaMotorEl, { leer: leerPreferencia, guardar: guardarPreferencia });
+const utilidades = crearUtilidades(vistaUtilidadesEl, {
+  leer: leerPreferencia,
+  guardar: guardarPreferencia,
+  // lo que le falta al temporizador se ve arriba, en cualquier pestaña
+  alTemporizador: (texto, terminado) => {
+    temporizadorChipEl.hidden = !texto;
+    temporizadorChipEl.classList.toggle('terminado', Boolean(terminado));
+    if (texto && temporizadorChipEl.textContent !== `⏳ ${texto}`) temporizadorChipEl.textContent = `⏳ ${texto}`;
+  },
+});
+temporizadorChipEl.addEventListener('click', () => {
+  utilidades.abrir('temporizador');
+  cambiarSeccion('utilidades');
+});
 
 function cambiarSeccion(nueva) {
   if (!SECCIONES.some((s) => s.id === nueva)) return;
@@ -508,13 +529,15 @@ function pintarSeccion() {
     else b.removeAttribute('aria-current');
   });
   const enMapa = seccion === 'mapa';
-  const enMotor = seccion === 'motor';
-  vistaListaEl.hidden = enMapa || enMotor;
+  const sinCamaras = seccion === 'motor' || seccion === 'utilidades'; // ni lista ni mapa
+  vistaListaEl.hidden = enMapa || sinCamaras;
   vistaMapaEl.hidden = !enMapa;
-  vistaMotorEl.hidden = !enMotor;
+  vistaMotorEl.hidden = seccion !== 'motor';
+  vistaUtilidadesEl.hidden = seccion !== 'utilidades';
   document.body.classList.toggle('en-mapa', enMapa);
-  motor.mostrar(enMotor);
-  if (enMotor) {
+  motor.mostrar(seccion === 'motor');
+  utilidades.mostrar(seccion === 'utilidades');
+  if (sinCamaras) {
     // sin tarjetas a la vista no se renueva ninguna foto
     observador.disconnect();
     visibles.clear();
@@ -582,7 +605,7 @@ function htmlTarjeta(id) {
 
 /** Dibuja la lista de la sección actual. `forzar` la reconstruye aunque no haya cambiado. */
 function pintarLista(forzar = false) {
-  if (seccion === 'mapa' || seccion === 'motor') return;
+  if (seccion === 'mapa' || seccion === 'motor' || seccion === 'utilidades') return;
   const lista = listaFiltrada();
   const firma = `${seccion}|${lista.join(',')}`;
   if (forzar || firma !== firmaLista) {
@@ -2013,12 +2036,18 @@ document.addEventListener('keydown', (evento) => {
     if (evento.key === 'Escape') evento.target.blur();
     return;
   }
+  if (seccion === 'utilidades') {
+    if (utilidades.tecla(evento)) {
+      evento.preventDefault();
+      return;
+    }
+  }
   if (seccion === 'motor' && motor.tecla(evento, true)) {
     evento.preventDefault();
-  } else if (evento.key === '/' && seccion !== 'mapa' && seccion !== 'motor') {
+  } else if (evento.key === '/' && LISTAS.includes(seccion)) {
     evento.preventDefault();
     busquedaEl.focus();
-  } else if (/^[1-3]$/.test(evento.key)) {
+  } else if (/^[1-4]$/.test(evento.key)) {
     const destinoNav = NAVEGACION[Number(evento.key) - 1].id;
     cambiarSeccion(destinoNav === 'camaras' ? listaCamaras : destinoNav);
   }
@@ -2083,7 +2112,7 @@ function tic() {
       revisarFoto(elegida, ahora);
       pintarPanel();
     }
-  } else if (seccion !== 'motor') {
+  } else if (LISTAS.includes(seccion)) {
     visibles.forEach((id) => {
       revisarFoto(id, ahora);
       pintarCamara(id);
@@ -2124,7 +2153,7 @@ function pintarFrescura(ahora = Date.now()) {
 function repintarDatos() {
   if (seccion === 'mapa') pintarMapa();
   if (seccion === 'mapa' && ruta) pintarRuta(); // la lluvia en la ruta cambia con el radar
-  else if (seccion !== 'motor') {
+  else if (LISTAS.includes(seccion)) {
     tarjetas.forEach((_, id) => pintarCamara(id));
     if (filtros.lluvia || filtros.alerta) pintarLista();
     else pintarHerramientas(listaFiltrada());

@@ -30,6 +30,7 @@ export const ICONOS = {
   rayo: svg('<path d="M13.5 2.5L5 13.5h5.5l-1 8L18 10.5h-5.5z" fill="currentColor" stroke="none"/>'),
   filtros: svg('<path d="M4 6h16M7 12h10M10 18h4"/>'),
   corazon: svg('<path d="M12 20s-7-4.6-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.4-7 10-7 10z" fill="currentColor" stroke="none"/>'),
+  utilidades: svg('<rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><circle cx="16.75" cy="16.75" r="3.25"/>'),
   campana: svg('<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/>'),
   recargar: svg('<path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/>'),
 };
