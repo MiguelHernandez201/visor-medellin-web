@@ -90,6 +90,7 @@ export function crearMapa(contenedor, { vista, alElegir, alMover, alTocar = () =
   panelNombres.style.pointerEvents = 'none';
   mapa.createPane('gotas').style.zIndex = 590;
   mapa.createPane('fotomultas').style.zIndex = 595; // debajo de las cámaras (600)
+  mapa.createPane('lugares').style.zIndex = 610; // cargadores y moteles: pocos, sobre las cámaras para que no se pierdan
   mapa.createPane('ruta').style.zIndex = 420; // sobre la lluvia y los nombres, bajo los puntos
   mapa.createPane('vehiculo').style.zIndex = 640; // encima de todo lo demás
   mapa.getPane('vehiculo').style.pointerEvents = 'none';
@@ -355,7 +356,7 @@ export function crearMapa(contenedor, { vista, alElegir, alMover, alTocar = () =
       estado.capa = L.layerGroup();
       for (const punto of lista) {
         const marca = L.marker([punto.latitud, punto.longitud], {
-          pane: 'fotomultas',
+          pane: 'lugares',
           keyboard: false,
           title: titulo(punto),
           icon: L.divIcon({ className: 'marcador', html: icono(punto), iconSize: [0, 0] }),
