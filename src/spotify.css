@@ -14,7 +14,30 @@
   width: 100%;
 }
 
+.spotify-bloqueo {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  max-width: 440px;
+  padding: 24px 20px;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie);
+  text-align: center;
+}
+
+.spotify-bloqueo h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.spotify-bloqueo p {
+  margin: 0;
+  color: var(--texto-suave);
+}
+
 .spotify-sesion[hidden],
+.spotify-bloqueo[hidden],
 .spotify-reproductor[hidden] {
   display: none;
 }

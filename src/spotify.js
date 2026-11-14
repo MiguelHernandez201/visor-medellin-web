@@ -20,6 +20,7 @@ const PERMISOS = [
 const CLAVE = 'visor-spotify'; // tokens en localStorage
 const CLAVE_INICIO = 'visor-spotify-inicio'; // verificador PKCE mientras se va a Spotify y vuelve
 const API = 'https://api.spotify.com/v1';
+const NO_PREMIUM = 'Para escuchar música dentro de la app, Spotify pide una cuenta Premium.';
 
 const escapar = (texto) =>
   String(texto).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -139,13 +140,14 @@ async function api(ruta, { metodo = 'GET', cuerpo } = {}) {
   if (!respuesta.ok) {
     const mensaje = (datos && datos.error && datos.error.message) || texto || `HTTP ${respuesta.status}`;
     if (respuesta.status === 403) {
-      throw new Error(
+      // 403: Spotify no deja usar esta cuenta aquí. Se muestra una pantalla clara, no el reproductor.
+      const error = new Error(
         /registered|dashboard/i.test(mensaje)
-          ? 'esta cuenta no está agregada en «User Management» de la app en el panel de desarrolladores de Spotify.'
-          : /premium/i.test(mensaje)
-            ? 'hace falta Spotify Premium.'
-            : `Spotify negó el acceso (${mensaje}). Revisa que la cuenta sea Premium y esté agregada en «User Management».`,
+          ? 'Esta cuenta todavía no tiene permiso para usar Spotify en la app. Pídele al dueño de la app que la agregue en el panel de Spotify.'
+          : NO_PREMIUM,
       );
+      error.bloquea = true;
+      throw error;
     }
     throw new Error(mensaje);
   }
@@ -177,6 +179,7 @@ export function crearSpotify(el) {
   let dispositivo = null; // id del reproductor de la app en Spotify Connect
   let estadoActual = null; // último estado del reproductor
   let aviso = '';
+  let bloqueo = ''; // por qué no se puede usar Spotify con esta cuenta (403, sin Premium, sin DRM)
   let listas = null;
   let resultados = null;
   let arrancando = false;
@@ -187,6 +190,15 @@ export function crearSpotify(el) {
         <p>Pon tu música de Spotify dentro de la app: así suena junto con la voz de la ruta, las fotomultas, las bromas y el motor.</p>
         <button class="boton boton-principal util-grande" type="button" data-spotify="entrar">Iniciar sesión con Spotify</button>
         <p class="secundario">Necesita Spotify Premium. Mientras la app de Spotify esté en modo de desarrollo, solo entran las cuentas agregadas en su panel.</p>
+      </div>
+      <div class="spotify-bloqueo" hidden>
+        <span class="util-emoji" aria-hidden="true">🎧</span>
+        <h2>No se pudo conectar con Spotify</h2>
+        <p class="spotify-bloqueo-texto"></p>
+        <div class="util-fila">
+          <button class="boton boton-principal" type="button" data-spotify="otra">Usar otra cuenta</button>
+          <button class="boton" type="button" data-spotify="reintentar">Reintentar</button>
+        </div>
       </div>
       <div class="spotify-reproductor" hidden>
         <div class="spotify-ahora">
@@ -218,9 +230,11 @@ export function crearSpotify(el) {
   function pintar() {
     const conSesion = Boolean(leer(CLAVE));
     $('.spotify-sesion').hidden = conSesion;
-    $('.spotify-reproductor').hidden = !conSesion;
-    $('.spotify-aviso').textContent = aviso;
-    if (!conSesion) return;
+    $('.spotify-bloqueo').hidden = !conSesion || !bloqueo;
+    $('.spotify-reproductor').hidden = !conSesion || Boolean(bloqueo);
+    $('.spotify-bloqueo-texto').textContent = bloqueo;
+    $('.spotify-aviso').textContent = bloqueo ? '' : aviso;
+    if (!conSesion || bloqueo) return;
     const pista = estadoActual && estadoActual.track_window && estadoActual.track_window.current_track;
     $('.spotify-cancion strong').textContent = pista ? pista.name : dispositivo ? 'Elige qué escuchar' : 'Conectando…';
     $('.spotify-cancion span').textContent = pista ? pista.artists.map((a) => a.name).join(', ') : '';
@@ -256,7 +270,7 @@ export function crearSpotify(el) {
   }, 1000);
 
   async function arrancar() {
-    if (reproductor || arrancando || !leer(CLAVE)) return;
+    if (reproductor || arrancando || bloqueo || !leer(CLAVE)) return;
     arrancando = true;
     aviso = '';
     pintar();
@@ -264,7 +278,9 @@ export function crearSpotify(el) {
       // antes del reproductor, la cuenta: así un «no registrada» o «no es Premium» se explica claro
       const cuenta = await api('/me');
       if (cuenta && cuenta.product && cuenta.product !== 'premium') {
-        throw new Error(`La cuenta ${cuenta.email || cuenta.display_name || ''} no es Premium: Spotify solo deja reproducir en otras apps con Premium.`);
+        const error = new Error(NO_PREMIUM);
+        error.bloquea = true;
+        throw error;
       }
       const Spotify = await cargarSdk();
       reproductor = new Spotify.Player({
@@ -287,8 +303,7 @@ export function crearSpotify(el) {
         pintar();
       });
       reproductor.addListener('initialization_error', () => {
-        aviso = 'Este navegador no puede reproducir Spotify: no tiene el contenido protegido (DRM) que Spotify exige.';
-        pintar();
+        bloquear('Este navegador no puede reproducir Spotify: no tiene el contenido protegido (DRM) que Spotify exige.');
       });
       reproductor.addListener('authentication_error', () => {
         escribir(CLAVE, null);
@@ -297,8 +312,7 @@ export function crearSpotify(el) {
         pintar();
       });
       reproductor.addListener('account_error', () => {
-        aviso = 'Spotify solo deja reproducir aquí con una cuenta Premium.';
-        pintar();
+        bloquear(NO_PREMIUM);
       });
       reproductor.addListener('playback_error', ({ message }) => {
         aviso = `Spotify no pudo reproducir: ${message}`;
@@ -307,10 +321,23 @@ export function crearSpotify(el) {
       await reproductor.connect();
       cargarListas();
     } catch (error) {
-      aviso = error.message.charAt(0).toUpperCase() + error.message.slice(1);
+      if (error.bloquea) bloquear(error.message);
+      else if (error instanceof TypeError) aviso = 'No se pudo conectar con Spotify. Revisa la conexión y toca Reintentar.';
+      else aviso = error.message.charAt(0).toUpperCase() + error.message.slice(1);
+      if (reproductor) reproductor.disconnect();
       reproductor = null;
     }
     arrancando = false;
+    pintar();
+  }
+
+  /** Deja de intentar y muestra la pantalla de «No se pudo conectar» con `motivo`. */
+  function bloquear(motivo) {
+    bloqueo = motivo;
+    if (reproductor) reproductor.disconnect();
+    reproductor = null;
+    dispositivo = null;
+    estadoActual = null;
     pintar();
   }
 
@@ -320,7 +347,8 @@ export function crearSpotify(el) {
       listas = (datos.items || []).filter(Boolean).map((l) => ({ nombre: l.name, uri: l.uri, imagen: l.images && l.images.length ? l.images[l.images.length - 1].url : '' }));
     } catch (error) {
       listas = [];
-      aviso = `No se pudieron leer tus listas: ${error.message}`;
+      if (error.bloquea) bloquear(error.message);
+      else aviso = `No se pudieron leer tus listas: ${error.message}`;
     }
     pintar();
   }
@@ -383,7 +411,13 @@ export function crearSpotify(el) {
       }
       return;
     }
-    if (accion === 'salir') {
+    if (accion === 'reintentar') {
+      bloqueo = '';
+      aviso = '';
+      return void arrancar();
+    }
+    if (accion === 'salir' || accion === 'otra') {
+      bloqueo = '';
       if (reproductor) reproductor.disconnect();
       reproductor = null;
       dispositivo = null;
@@ -391,6 +425,7 @@ export function crearSpotify(el) {
       listas = null;
       resultados = null;
       escribir(CLAVE, null);
+      if (accion === 'otra') return void iniciarSesion().catch(() => pintar());
       return void pintar();
     }
     if (!reproductor) return;
