@@ -4,6 +4,7 @@
 // - la lluvia: el radar (o un cuadro de la animación) o el mapa de calor, en un <canvas>
 //   sobre el RECORTE del valle, y una gota en cada pluviómetro donde llueve.
 // - las cámaras de fotodetección (fotomultas), como señales con el límite de velocidad.
+// - los cargadores de carros eléctricos, con el color de su red.
 // - el carro (flecha con el rumbo del GPS) y la ruta hasta un destino.
 // Fondo: teselas "World Dark Gray" de Esri (base y, encima de la lluvia, los nombres).
 import L from 'leaflet';
@@ -327,6 +328,55 @@ export function crearMapa(contenedor, { vista, alElegir, alMover, alTocar = () =
     }
   }
 
+  // -------------------------------------------------------------------------
+  // Cargadores de carros eléctricos
+  // -------------------------------------------------------------------------
+  let capaCargadores = null;
+  let versionCargadores = 0;
+
+  /**
+   * Muestra u oculta los cargadores. lista = [{ latitud, longitud, red, nombre }]; `html(c)`
+   * da el globo, y `alIr(c)` se llama al tocar su botón «Ir aquí» (clase .globo-ir).
+   */
+  function cargadores(lista, html, alIr, version = 0) {
+    if (capaCargadores && version !== versionCargadores) {
+      capaCargadores.remove();
+      capaCargadores = null;
+    }
+    versionCargadores = version;
+    if (!lista) {
+      if (capaCargadores) capaCargadores.remove();
+      return;
+    }
+    if (!capaCargadores) {
+      capaCargadores = L.layerGroup();
+      for (const cargador of lista) {
+        const marca = L.marker([cargador.latitud, cargador.longitud], {
+          pane: 'fotomultas',
+          keyboard: false,
+          title: `Cargador · ${cargador.nombre}`,
+          icon: L.divIcon({
+            className: 'marcador',
+            html: `<span class="cargador red-${cargador.red}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.5 2.5L5 13.5h5.5l-1 8L18 10.5h-5.5z"/></svg></span>`,
+            iconSize: [0, 0],
+          }),
+        }).bindPopup(() => html(cargador), { className: 'globo', maxWidth: 270, offset: [0, -10] });
+        // Leaflet no deja salir del globo los clics: el botón se conecta al abrirlo
+        marca.on('popupopen', (evento) => {
+          const boton = evento.popup.getElement().querySelector('.globo-ir');
+          if (boton) {
+            boton.onclick = () => {
+              mapa.closePopup();
+              alIr(cargador);
+            };
+          }
+        });
+        marca.addTo(capaCargadores);
+      }
+    }
+    if (!mapa.hasLayer(capaCargadores)) capaCargadores.addTo(mapa);
+  }
+
   let capaRuta = null;
 
   /** Dibuja la ruta (puntos = [[lat, lon]]) y el destino ([lat, lon]); null quita cada uno. */
@@ -428,6 +478,7 @@ export function crearMapa(contenedor, { vista, alElegir, alMover, alTocar = () =
     elegir,
     lluvia,
     fotomultas,
+    cargadores,
     vehiculo,
     ruta,
     encuadrar,

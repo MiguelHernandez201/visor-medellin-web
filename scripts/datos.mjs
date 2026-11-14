@@ -13,6 +13,7 @@
 //   datos/series/<cód>.json   nivel de las últimas 3 h de las estaciones que tienen cámara
 //   datos/umbrales.json       últimos umbrales conocidos de cada estación (cm)
 //   datos/fotomultas.json     cámaras de fotodetección de la Alcaldía (se renueva una vez al día)
+//   datos/cargadores.json     cargadores de carros eléctricos, de OpenStreetMap (una vez al día)
 //   datos/estado.json         cuándo se generó y qué falló
 //
 // Los archivos son las respuestas del geoportal tal cual, salvo niveles.json, al que se le
@@ -24,6 +25,7 @@
 // datos/ antes de correr esto). Termina con error solo si fallan todas.
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { CAMARAS_SIATA } from '../src/siata.js';
+import { redDe } from '../src/redes-carga.js';
 
 const API = 'https://geoportal.siata.gov.co/fastgeoapi';
 const CARPETA = new URL('../datos/', import.meta.url);
@@ -173,6 +175,101 @@ if (edadHoras < 20) {
     estado.archivos['fotomultas.json'] = { ok: true, camaras: camaras.length };
   } catch (error) {
     estado.archivos['fotomultas.json'] = { ok: false, error: String(error.message || error) };
+  }
+}
+
+// Cargadores de carros eléctricos: OpenStreetMap (amenity=charging_station) en el Valle de
+// Aburrá y sus alrededores, por Overpass. Una vez al día; si falla, queda la lista anterior.
+const OVERPASS = 'https://overpass-api.de/api/interpreter';
+const CONSULTA = '[out:json][timeout:60];nwr["amenity"="charging_station"](5.95,-75.75,6.55,-75.25);out center tags;';
+const CONECTORES = {
+  type2: 'Tipo 2',
+  type2_cable: 'Tipo 2',
+  type2_combo: 'CCS2',
+  type1: 'Tipo 1',
+  type1_combo: 'CCS1',
+  chademo: 'CHAdeMO',
+  tesla_supercharger: 'Tesla',
+  tesla_destination: 'Tesla',
+  nacs: 'NACS',
+  gb_dc: 'GB/T rápido',
+  gb_ac: 'GB/T',
+  schuko: 'Enchufe común',
+  nema_5_15: 'Enchufe común',
+  nema_5_20: 'Enchufe común',
+};
+
+/** kW de un texto como "50 kW", "7,4kW", "22000 W" o "150"; null si no se entiende. */
+function kilovatios(texto) {
+  const m = /([\d.,]+)\s*(kw|kva|w)?/i.exec(String(texto || ''));
+  if (!m) return null;
+  let valor = Number(m[1].replace(',', '.'));
+  if (!(valor > 0)) return null;
+  if ((m[2] || '').toLowerCase() === 'w') valor /= 1000;
+  return valor > 0 && valor <= 500 ? Math.round(valor * 10) / 10 : null;
+}
+
+function leerCargadores(json) {
+  const limpio = (texto) => String(texto || '').replace(/\s+/g, ' ').trim();
+  const lista = [];
+  for (const elemento of json.elements || []) {
+    const t = elemento.tags || {};
+    const latitud = elemento.lat ?? (elemento.center && elemento.center.lat);
+    const longitud = elemento.lon ?? (elemento.center && elemento.center.lon);
+    if (typeof latitud !== 'number' || typeof longitud !== 'number') continue;
+    if (['private', 'no'].includes(t.access)) continue; // los de uso privado no sirven en el mapa
+    if (t.disused === 'yes' || t.abandoned === 'yes') continue;
+    const operador = limpio(t.operator || t.network || t.brand);
+    const conectores = new Set();
+    let kw = kilovatios(t['charging_station:output']);
+    for (const [clave, valor] of Object.entries(t)) {
+      const m = /^socket:([a-z0-9_]+)(:output)?$/.exec(clave);
+      if (!m) continue;
+      if (m[2]) kw = Math.max(kw || 0, kilovatios(valor) || 0) || kw;
+      else if (valor !== 'no' && CONECTORES[m[1]]) conectores.add(CONECTORES[m[1]]);
+    }
+    const calle = limpio([t['addr:street'], t['addr:housenumber']].filter(Boolean).join(' '));
+    const nombre = limpio(t.name).replace(/^(punto|estaci[oó]n) de carga\s+/i, '') || operador || 'Cargador';
+    lista.push({
+      id: `${elemento.type[0].toUpperCase()}${elemento.id}`,
+      nombre,
+      red: redDe(t.name, t.operator, t.network, t.brand),
+      operador,
+      direccion: limpio([calle, t['addr:city']].filter(Boolean).join(', ')),
+      latitud: Math.round(latitud * 1e5) / 1e5,
+      longitud: Math.round(longitud * 1e5) / 1e5,
+      conectores: [...conectores],
+      kw: kw || null,
+      plazas: Number(t.capacity) > 0 ? Number(t.capacity) : null,
+      pago: t.fee === 'yes' ? true : t.fee === 'no' ? false : null,
+      horario: limpio(t.opening_hours) === '24/7' ? '24 horas' : limpio(t.opening_hours),
+    });
+  }
+  return lista;
+}
+
+const cargadoresAntes = leerJson('cargadores.json', null);
+const edadCargadores = cargadoresAntes && cargadoresAntes.leido ? (Date.now() - Date.parse(cargadoresAntes.leido)) / 3600000 : Infinity;
+if (edadCargadores < 20) {
+  estado.archivos['cargadores.json'] = { ok: true, cargadores: cargadoresAntes.cargadores.length, leido: cargadoresAntes.leido };
+} else {
+  try {
+    const respuesta = await fetch(OVERPASS, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': 'visor-medellin-web (relevo de datos; github.com/MiguelHernandez201/visor-medellin-web)',
+      },
+      body: `data=${encodeURIComponent(CONSULTA)}`,
+      signal: AbortSignal.timeout(70000),
+    });
+    if (!respuesta.ok) throw new Error(`HTTP ${respuesta.status}`);
+    const cargadores = leerCargadores(await respuesta.json());
+    if (cargadores.length < 5) throw new Error(`respuesta rara (${cargadores.length} cargadores)`);
+    guardar('cargadores.json', { leido: new Date().toISOString(), fuente: '© Colaboradores de OpenStreetMap (ODbL)', cargadores });
+    estado.archivos['cargadores.json'] = { ok: true, cargadores: cargadores.length };
+  } catch (error) {
+    estado.archivos['cargadores.json'] = { ok: false, error: String(error.message || error) };
   }
 }
 

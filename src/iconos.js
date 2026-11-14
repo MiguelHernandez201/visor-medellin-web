@@ -27,6 +27,7 @@ export const ICONOS = {
   trabajo: svg('<rect x="3.5" y="8" width="17" height="11" rx="2"/><path d="M9 8V6a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 6v2M3.5 13h17"/>'),
   reloj: svg('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'),
   brujula: svg('<path d="M12 3l4 9h-8z" fill="currentColor"/><path d="M8 12l4 9 4-9"/>'),
+  rayo: svg('<path d="M13.5 2.5L5 13.5h5.5l-1 8L18 10.5h-5.5z" fill="currentColor" stroke="none"/>'),
   campana: svg('<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/>'),
   recargar: svg('<path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/>'),
 };

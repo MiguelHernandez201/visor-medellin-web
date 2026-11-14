@@ -23,6 +23,7 @@ Versión web del [Visor Medellín para LG webOS TV](https://github.com/MiguelHer
 - **Rumbo arriba**: mientras el mapa sigue al carro, gira con él para que la vía quede hacia arriba, como en un navegador. La brújula (junto a la flecha) lo cambia a norte arriba. Al arrastrar el mapa o al ir a tocar un destino vuelve al norte arriba. Los nombres de las calles son parte de la imagen del mapa, así que giran con él.
 - **Destinos guardados**: Casa, Trabajo y los seis últimos destinos quedan a un toque en el panel de rutas (se guardan solo en este navegador).
 - **Lluvia y cámaras en la ruta**: el resumen de la ruta dice si llueve en el recorrido según el radar (qué tan fuerte, dónde empieza y cuánto tramo) y lo repite la guía al manejar; debajo van las fotos de las cámaras que quedan sobre la ruta, en orden.
+- **Cargadores para carros eléctricos**: capa del mapa con los cargadores públicos, cada uno con el color de su red (Terpel Voltex, Celsia, EPM, Enel X, Evsy, Tesla, centros comerciales y otras). Al tocar uno se ven la red, los conectores, la potencia y los puestos que estén registrados, y un botón **Ir aquí** que traza la ruta. También se pueden buscar por nombre o red, y el panel de rutas ofrece **Ir al cargador más cercano**. Los datos son de [OpenStreetMap](https://www.openstreetmap.org/copyright) (voluntarios; pueden faltar cargadores o detalles): el relevo los lee una vez al día. No muestra disponibilidad ni precios en vivo.
 - **Motor**: sonido de motor de gasolina para un carro eléctrico, generado en vivo (sin grabaciones) y que sigue la velocidad del GPS. Seis motores (V8 americano, V8 deportivo, V12, bóxer 6, 4 cilindros turbo y eléctrico), caja automática imaginaria con cambios, limitador y petardeo. **Prueba con pedales** (acelerador y freno, o ↑ ↓ en el teclado) y **Demostración** para oírlo sin moverse; **Acelerar en neutro** con el carro detenido. Ajustes: volumen, intensidad, carácter, petardeo, tono y volumen del silbido, km/h o mph y encender al abrir. La ubicación solo se usa para medir la velocidad y no sale del navegador. El motor sigue sonando al pasar a las otras secciones.
 - **Clima y alertas**: temperatura del centro en la barra superior y franja roja si el SIATA tiene una alerta vigente.
 - **Se instala como app** (botón «Instalar» en Chrome/Edge/Android, «Añadir a pantalla de inicio» en Safari) y abre rápido gracias al service worker. Favoritas, sección, filtros y vista del mapa se recuerdan en el navegador.
@@ -57,6 +58,7 @@ La app del TV corre desde `file://` y puede leer cualquier sitio. En el navegado
 `.github/workflows/datos.yml` corre cada 5 minutos en GitHub Actions: `scripts/datos.mjs` descarga del geoportal los niveles, pluviómetros, estaciones meteorológicas, PM2.5, alertas y las series de 3 h de las ~50 estaciones que tienen cámara, y los publica en la rama **`datos`** (un solo commit que se reemplaza cada vez). La app los lee de `raw.githubusercontent.com/MiguelHernandez201/visor-medellin-web/datos/…`, que sí envía CORS.
 
 - El mismo relevo lee una vez al día las cámaras de fotodetección del servidor de mapas de la Alcaldía (`fotomultas.json`); si falla o llega algo raro, se conserva la lista anterior.
+- También una vez al día consulta en OpenStreetMap (Overpass) los cargadores de carros eléctricos de la zona (`cargadores.json`), con la misma regla: si falla, queda la lista anterior.
 - Los datos llegan con **5 a 15 minutos de retraso** (GitHub no corre los flujos programados a la hora exacta, y raw.githubusercontent.com guarda 5 min en caché). En el TV llegan al minuto.
 - La API a veces responde sin los umbrales de riesgo de las estaciones: el relevo guarda los últimos que llegaron (`umbrales.json`) y los rellena.
 - Si una fuente falla, se conserva su archivo anterior; `estado.json` dice qué falló y cuándo se generó.
@@ -92,6 +94,7 @@ Para probar con datos locales: `npm run datos`, sirve la carpeta del proyecto y 
 | `src/avisos.js` | Aviso sonoro al acercarse a una fotomulta (GPS, rumbo y sentido de la cámara) |
 | `src/ubicacion.js` | Posición, rumbo y velocidad del carro (GPS) para el mapa |
 | `src/rutas.js` | Búsqueda de lugares (Photon), ruta en carro (OSRM), indicaciones en español y seguimiento de la ruta |
+| `src/cargadores.js`, `src/redes-carga.js` | Cargadores de carros eléctricos (OpenStreetMap) y las redes que se distinguen |
 | `src/iconos.js` | Íconos SVG |
 | `src/app.css` | Estilos adaptables (celular, tableta, computador) |
 | `src/pwa.js` | Registro del service worker y botón «Instalar app» |

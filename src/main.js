@@ -46,6 +46,7 @@ import { ICONOS } from './iconos.js';
 import { registrarServiceWorker, prepararInstalacion } from './pwa.js';
 import { crearMotor } from './motor.js';
 import { FOTOMULTAS, revisarFotomultas, alActualizarFotomultas } from './fotomultas.js';
+import { CARGADORES, REDES, nombreRed, revisarCargadores, alActualizarCargadores } from './cargadores.js';
 import { crearAvisos } from './avisos.js';
 import { crearUbicacion } from './ubicacion.js';
 import {
@@ -56,6 +57,7 @@ import {
   muestrasDeRuta,
   cercaDeRuta,
   viaEn,
+  metrosEntre,
   textoDistancia,
   textoDuracion,
 } from './rutas.js';
@@ -329,6 +331,7 @@ app.innerHTML = `
         <button class="boton-fotomultas" type="button" aria-pressed="false" title="Cámaras de fotodetección de la Secretaría de Movilidad"><span class="fotomulta">60</span><span>Fotomultas</span></button>
         <button class="boton-aviso" type="button" aria-pressed="false" title="Suena al acercarte a una fotomulta (usa el GPS)">${ICONOS.campana}<span>Aviso sonoro</span></button>
         <button class="boton-panel" type="button" aria-expanded="true"></button>
+        <button class="boton-cargadores" type="button" aria-pressed="false" title="Cargadores públicos para carros eléctricos (OpenStreetMap)"><span class="cargador red-epm">${ICONOS.rayo}</span><span>Cargadores</span></button>
         <button class="boton-ruta" type="button" aria-pressed="false" title="Buscar una ruta en carro">${ICONOS.ruta}<span>Ruta</span></button>
         <button class="boton-icono boton-ubicar" type="button" aria-pressed="false" aria-label="Ver mi carro en el mapa" title="Ver mi carro en el mapa">${ICONOS.ubicar}</button>
         <span class="nota-ubicacion" hidden></span>
@@ -348,6 +351,7 @@ app.innerHTML = `
             <span><span class="punto punto-rios"></span>Ríos</span>
             <span><span class="punto punto-siata lluvia-2"></span>Llueve</span>
             <span class="leyenda-fotomulta"><span class="fotomulta">60</span>Fotomulta y su límite</span>
+            <span class="leyenda-cargador"><span class="cargador red-epm">${ICONOS.rayo}</span>Cargador</span>
           </span>
           <span class="leyenda-frescura"></span>
         </div>
@@ -378,6 +382,7 @@ app.innerHTML = `
             <li><span class="punto punto-rios nivel-3"></span>Río en alerta</li>
             <li><span class="gota nivel-2"></span>Pluviómetro: llueve</li>
             <li><span class="fotomulta">60</span>Fotomulta: el número es el límite de velocidad</li>
+            <li class="convencion-cargadores"><span>Cargadores, por red:</span>${REDES.map((red) => `<span class="red"><span class="cargador red-${red.id}">${ICONOS.rayo}</span>${red.nombre}</span>`).join('')}</li>
           </ul>
         </div>
         <div class="panel-camara" hidden>
@@ -454,6 +459,7 @@ const capasEl = $('.capas-lluvia');
 const botonFotomultasEl = $('.boton-fotomultas');
 const botonAvisoEl = $('.boton-aviso');
 const botonRutaEl = $('.boton-ruta');
+const botonCargadoresEl = $('.boton-cargadores');
 const botonPanelEl = $('.boton-panel');
 const botonUbicarEl = $('.boton-ubicar');
 const notaUbicacionEl = $('.nota-ubicacion');
@@ -821,6 +827,48 @@ function htmlFotomulta(camara) {
     <span>Detecta: ${escapar(detecta.join(', '))}.</span>`;
 }
 
+// Cargadores de carros eléctricos (cargadores.js): capa del mapa que se puede ocultar.
+let verCargadores = leerPreferencia('cargadores', true);
+let versionCargadores = 0;
+
+/** Globo de un cargador: red, lugar, conectores, potencia y botón para trazar la ruta. */
+function htmlCargador(c) {
+  const red = c.red === 'otra' && c.operador ? c.operador : nombreRed(c.red);
+  const operador = c.operador && c.red !== 'otra' && !new RegExp(c.operador, 'i').test(red) ? ` · ${c.operador}` : '';
+  const datos = [];
+  if (c.conectores.length) datos.push(c.conectores.join(', '));
+  if (c.kw) datos.push(`hasta ${String(c.kw).replace('.', ',')} kW`);
+  if (c.plazas) datos.push(c.plazas === 1 ? '1 puesto' : `${c.plazas} puestos`);
+  const extra = [];
+  if (c.pago != null) extra.push(c.pago ? 'De pago' : 'Gratis');
+  if (c.horario) extra.push(c.horario);
+  return `<strong>${escapar(c.nombre)}</strong>
+    <span>${escapar(red + operador)}</span>
+    ${c.direccion ? `<span>${escapar(c.direccion)}</span>` : ''}
+    ${datos.length ? `<span class="globo-limite">${escapar(datos.join(' · '))}</span>` : ''}
+    ${extra.length ? `<span>${escapar(extra.join(' · '))}</span>` : ''}
+    <button class="boton boton-principal globo-ir" type="button">${ICONOS.ruta}<span>Ir aquí</span></button>`;
+}
+
+const destinoCargador = (c) => ({ nombre: c.nombre, detalle: `Cargador · ${nombreRed(c.red)}`, latitud: c.latitud, longitud: c.longitud });
+
+function pintarCargadores() {
+  botonCargadoresEl.setAttribute('aria-pressed', String(verCargadores));
+  $('.leyenda-cargador').hidden = !verCargadores;
+  if (mapa) mapa.cargadores(verCargadores ? CARGADORES : null, htmlCargador, (c) => fijarDestino(destinoCargador(c)), versionCargadores);
+}
+
+botonCargadoresEl.addEventListener('click', () => {
+  verCargadores = !verCargadores;
+  guardarPreferencia('cargadores', verCargadores);
+  pintarCargadores();
+});
+
+alActualizarCargadores(() => {
+  versionCargadores += 1;
+  pintarCargadores();
+});
+
 // La lista de fotomultas se renueva sola desde el relevo (una vez al día).
 let versionFotomultas = 0;
 alActualizarFotomultas(() => {
@@ -835,6 +883,7 @@ alActualizarFotomultas(() => {
 function pintarFotomultas() {
   if (!mapa) return;
   mapa.fotomultas(verFotomultas ? FOTOMULTAS : null, htmlFotomulta, versionFotomultas);
+  pintarCargadores();
   botonFotomultasEl.setAttribute('aria-pressed', String(verFotomultas));
   $('.leyenda-fotomulta').hidden = !verFotomultas;
 }
@@ -1022,7 +1071,11 @@ async function buscarDestino(texto) {
   }
   if (busquedaLugares !== control) return;
   busquedaLugares = null;
-  resultados = [...lugares, ...camaras];
+  // los cargadores también se pueden buscar, por nombre o por red
+  const cargadores = CARGADORES.filter((c) => normalizar(`${c.nombre} ${nombreRed(c.red)} ${c.operador} cargador`).includes(buscado))
+    .slice(0, 4)
+    .map(destinoCargador);
+  resultados = [...lugares, ...cargadores, ...camaras];
   rutaEstado = resultados.length ? '' : fallo ? 'No se pudo buscar. Revisa la conexión o elige el destino en el mapa.' : 'No encontré ese lugar. Prueba con otro nombre o elige el destino en el mapa.';
   pintarRuta();
 }
@@ -1264,7 +1317,7 @@ function pintarRuta() {
           `<li><button type="button" data-guardado="${i}">${ICONOS.reloj}<span><strong>${escapar(lugar.nombre)}</strong><small>${escapar(lugar.detalle || '')}</small></span></button><button class="guardado-quitar" type="button" data-olvidar="${i}" aria-label="Quitar de recientes">${ICONOS.cerrar}</button></li>`,
       )
       .join('');
-    html = `<ul class="ruta-guardados">${fijos}</ul>${recientes ? `<h4 class="ruta-subtitulo">Recientes</h4><ul class="ruta-guardados">${recientes}</ul>` : ''}`;
+    html = `<button class="boton ruta-cargador" type="button" data-ruta="cargador"><span class="cargador red-epm">${ICONOS.rayo}</span><span>Ir al cargador más cercano</span></button><ul class="ruta-guardados">${fijos}</ul>${recientes ? `<h4 class="ruta-subtitulo">Recientes</h4><ul class="ruta-guardados">${recientes}</ul>` : ''}`;
   }
   if (html !== rutaPintada) {
     rutaPintada = html;
@@ -1333,6 +1386,22 @@ panelRutaEl.addEventListener('click', (evento) => {
   }
   const accion = objetivo.closest('[data-ruta]');
   if (!accion) return;
+  if (accion.dataset.ruta === 'cargador') {
+    // el más cercano al carro; sin GPS, al centro del mapa
+    const posicion = ubicacion.posicion();
+    const aqui = posicion ? [posicion.latitud, posicion.longitud] : mapa.centro();
+    let cercano = null;
+    let menor = Infinity;
+    for (const c of CARGADORES) {
+      const d = metrosEntre(aqui, [c.latitud, c.longitud]);
+      if (d < menor) {
+        menor = d;
+        cercano = c;
+      }
+    }
+    if (cercano) fijarDestino(destinoCargador(cercano));
+    return;
+  }
   if (accion.dataset.ruta === 'casa' || accion.dataset.ruta === 'trabajo') {
     const clave = accion.dataset.ruta;
     // un punto tocado en el mapa no tiene nombre propio: toma el de la casilla
@@ -1734,6 +1803,7 @@ function tic() {
   revisarAlertas();
   revisarPluvios();
   revisarFotomultas();
+  revisarCargadores();
   if (seccion === 'mapa') {
     // las fotos de las cámaras de la ruta, mientras su panel está a la vista
     if (ruta && rutaAbierta && !visor) ruta.camaras.forEach((c) => revisarFoto(c.lugar.id, ahora));
