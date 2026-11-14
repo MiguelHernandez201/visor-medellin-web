@@ -182,7 +182,7 @@ export function crearMotor(el, { leer, guardar }) {
       </div>
 
       <div class="motor-controles">
-        <h1 class="motor-titulo">Motor</h1>
+        <h1 class="motor-titulo">Motor Tesla</h1>
         <p class="motor-intro">Ponle sonido de motor de gasolina a tu carro eléctrico: se genera en vivo y sigue tu velocidad por GPS. Suena por los parlantes, como la música.</p>
 
         <div class="motor-lista" role="radiogroup" aria-label="Motor">

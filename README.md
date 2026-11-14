@@ -8,7 +8,7 @@ Versión web del [Visor Medellín para LG webOS TV](https://github.com/MiguelHer
 
 ## Qué hace
 
-- **Cinco secciones**: **Tránsito** (80 cámaras del SIMM), **SIATA** (deprimidos viales, panorámicas y cámaras de cielo), **Ríos** (72 cámaras del río Medellín, quebradas y drenajes, de norte a sur), **Mapa** y **Motor**. En el computador van arriba; en el celular, en una barra abajo, como en las apps.
+- **Tres secciones**: **Mapa** (la primera y con la que abre la app), **Ver cámaras** —con las subopciones **Tránsito** (80 cámaras del SIMM), **SIATA** (deprimidos viales, panorámicas y cámaras de cielo) y **Ríos** (72 cámaras del río Medellín, quebradas y drenajes, de norte a sur)— y **Motor Tesla**. En el computador van arriba; en el celular, en una barra abajo, como en las apps.
 - **Tarjetas con la foto** de cada cámara, en una grilla que se adapta al ancho (2 columnas en el celular). Solo se renuevan las que están a la vista.
 - **Búsqueda y filtros**: por nombre o dirección, *Favoritas*, *Con lluvia* y, en Ríos, *En alerta*.
 - **Lluvia en cada cámara**: etiqueta de llovizna, ligera, moderada o fuerte, del radar del SIATA (sin falsos ecos) confirmado con los pluviómetros a menos de 2,5 km.
@@ -28,7 +28,7 @@ Versión web del [Visor Medellín para LG webOS TV](https://github.com/MiguelHer
 
 | Acción | Ratón / táctil | Teclado |
 |---|---|---|
-| Cambiar de sección | Pestañas (arriba o abajo) | 1 a 5 |
+| Cambiar de sección | Pestañas (arriba o abajo) | 1 a 3 |
 | Acelerar / frenar (Motor, modo de prueba) | Pedales en pantalla | ↑ / ↓ |
 | Buscar | Caja de búsqueda | `/` |
 | Ver una cámara en grande | Tocar la foto | Tab hasta la foto y Enter |

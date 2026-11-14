@@ -272,6 +272,15 @@ svg {
   padding: 16px max(16px, env(safe-area-inset-left)) 24px;
 }
 
+.subsecciones {
+  margin-bottom: 14px;
+}
+
+.subsecciones button {
+  min-height: 40px;
+  padding: 6px 20px;
+}
+
 .herramientas {
   display: grid;
   grid-template-columns: auto minmax(220px, 420px) 1fr;
