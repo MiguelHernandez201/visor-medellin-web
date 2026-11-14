@@ -177,6 +177,25 @@ if (edadHoras < 20) {
     estado.archivos['fotomultas.json'] = { ok: true, camaras: camaras.length };
   } catch (error) {
     estado.archivos['fotomultas.json'] = { ok: false, error: String(error.message || error) };
+    // Sin ninguna lista publicada aún, se publica la de respaldo que trae la app (sin `leido`,
+    // así la app sabe que es la de respaldo): evita el 404 cada vez que la app la pide.
+    if (!fotomultasAntes) {
+      const respaldo = listaDeRespaldo();
+      if (respaldo.length) guardar('fotomultas.json', { respaldo: true, camaras: respaldo });
+    }
+  }
+}
+
+/** La lista de cámaras que trae src/fotomultas.js (no se puede importar: usa cosas del navegador). */
+function listaDeRespaldo() {
+  try {
+    const texto = readFileSync(new URL('../src/fotomultas.js', import.meta.url), 'utf8');
+    const inicio = texto.indexOf('export const FOTOMULTAS = [');
+    const fin = texto.indexOf('].map(', inicio);
+    const filas = JSON.parse(`[${texto.slice(texto.indexOf('[', inicio) + 1, fin).replace(/,\s*$/, '')}]`);
+    return filas.map(([nombre, direccion, sentido, limite, latitud, longitud, detecta]) => ({ nombre, direccion, sentido, limite, latitud, longitud, detecta }));
+  } catch {
+    return [];
   }
 }
 
