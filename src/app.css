@@ -1060,6 +1060,48 @@ body.en-mapa .contenido {
   font-variant-numeric: tabular-nums;
 }
 
+.guia .carriles {
+  display: flex;
+  justify-self: start;
+  gap: 3px;
+  margin-bottom: 6px;
+  padding: 4px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.guia .carril {
+  width: 34px;
+  height: 34px;
+  padding: 3px;
+  border-radius: 7px;
+  fill: none;
+  stroke: var(--texto-suave);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.35;
+}
+
+.guia .carril + .carril {
+  border-left: 1px dashed rgba(255, 255, 255, 0.25);
+  border-radius: 0 7px 7px 0;
+}
+
+.guia .carril.sirve {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.guia .carril.sirve .otra {
+  opacity: 0.4;
+}
+
+.guia .carril.sirve .usar {
+  stroke: var(--acento);
+  stroke-width: 2.8;
+}
+
 .guia .guia-nota {
   color: var(--amarillo);
 }

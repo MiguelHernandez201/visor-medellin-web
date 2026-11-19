@@ -1436,6 +1436,40 @@ function anunciarManiobra(avance, velocidad = 0) {
 }
 
 let guiaPintada = '';
+// Flechas de los carriles (viewBox 24×24, de abajo hacia arriba). Las de la derecha son las de
+// la izquierda en espejo.
+const TRAZO_FLECHA = {
+  straight: 'M12 21V4M7 9l5-5 5 5',
+  left: 'M15 21v-8a4 4 0 0 0-4-4H5M9 5L5 9l4 4',
+  'slight left': 'M14 21v-7L7 7M7 13V7h6',
+  'sharp left': 'M15 21V9l-8 8M7 11v6h6',
+  uturn: 'M16 21V9a4 4 0 0 0-8 0v9M4 14l4 4 4-4',
+};
+const CARRILES_DESDE = 800; // metros antes de la maniobra en que se muestran
+
+function flechaCarril(flecha, clase) {
+  const derecha = flecha.includes('right');
+  const trazo = TRAZO_FLECHA[derecha ? flecha.replace('right', 'left') : flecha] || TRAZO_FLECHA.straight;
+  return `<path class="${clase}" d="${trazo}"${derecha ? ' transform="matrix(-1 0 0 1 24 0)"' : ''}/>`;
+}
+
+/** Fila de carriles de la maniobra que viene (los que sirven, resaltados), o ''. */
+function htmlCarriles(paso, metros) {
+  const carriles = paso && paso.carriles;
+  if (!carriles || metros > CARRILES_DESDE) return '';
+  const sirven = carriles.map((c, i) => (c.sirve ? i + 1 : 0)).filter(Boolean);
+  const etiqueta = `Carriles: ${sirven.length === 1 ? `usa el ${sirven[0]}` : `usa el ${sirven.slice(0, -1).join(', ')} o el ${sirven.at(-1)}`} de ${carriles.length}, contando desde la izquierda`;
+  const filas = carriles
+    .map((c) => {
+      // la flecha que se usa va encima de las demás
+      const otras = c.flechas.filter((f) => f !== c.usar).map((f) => flechaCarril(f, 'otra'));
+      const usada = c.usar ? flechaCarril(c.usar, 'usar') : '';
+      return `<svg class="carril${c.sirve ? ' sirve' : ''}" viewBox="0 0 24 24" aria-hidden="true">${otras.join('')}${usada}</svg>`;
+    })
+    .join('');
+  return `<div class="carriles" role="img" aria-label="${etiqueta}">${filas}</div>`;
+}
+
 function pintarGuia(avance) {
   let html = '';
   if (eligiendoDestino) html = '<strong>Toca el mapa en tu destino</strong><button class="enlace" type="button" data-guia="cancelar">Cancelar</button>';
@@ -1444,7 +1478,7 @@ function pintarGuia(avance) {
     const fuera = fueraDeRuta >= 3 ? '<span class="guia-nota">Fuera de la ruta: recalculando…</span>' : '';
     const lluvia = lluviaEnRuta();
     const aviso = lluvia && lluvia.nivel ? `<span class="nivel-lluvia-texto-${lluvia.nivel}">${NIVELES[lluvia.nivel]} ${lluvia.en < 150 ? 'en este tramo' : `en ${textoDistancia(lluvia.en)}`}</span>` : '';
-    html = `<strong>En ${textoDistancia(avance.metrosAlPaso)} · ${escapar(avance.paso.texto)}</strong>
+    html = `${htmlCarriles(avance.paso, avance.metrosAlPaso)}<strong>En ${textoDistancia(avance.metrosAlPaso)} · ${escapar(avance.paso.texto)}</strong>
       <span>Faltan ${textoDistancia(avance.restante)} · ${textoDuracion(avance.segundos)}</span>${aviso}${fuera}`;
   } else if (ruta) {
     html = `<strong>${escapar(destino.nombre)}</strong><span>${textoDistancia(ruta.metros)} · ${textoDuracion(ruta.segundos)} sin tráfico</span>`;

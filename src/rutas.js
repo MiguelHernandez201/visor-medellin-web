@@ -171,9 +171,39 @@ function vozDePaso(paso) {
   }
 }
 
+// Flechas que puede tener un carril (las de OSRM, sin las que significan lo mismo).
+const FLECHAS = new Set(['straight', 'left', 'slight left', 'sharp left', 'right', 'slight right', 'sharp right', 'uturn']);
+const MISMA_FLECHA = { none: 'straight', merge_to_left: 'slight left', merge_to_right: 'slight right' };
+
+/**
+ * Carriles al llegar a la maniobra, de izquierda a derecha, según OpenStreetMap (llegan con
+ * OSRM): [{ flechas: ['left', 'straight'], sirve, usar }], o null si la vía no tiene ese dato o
+ * si todos los carriles sirven (no hay nada que avisar). `usar` es la flecha del carril que
+ * corresponde a la maniobra (solo en los que sirven).
+ */
+function carrilesDePaso(paso) {
+  const { type: tipo, modifier: modo = 'straight' } = paso.maneuver;
+  if (tipo === 'depart' || tipo === 'arrive') return null;
+  const cruce = paso.intersections && paso.intersections[0];
+  const lanes = cruce && cruce.lanes;
+  if (!Array.isArray(lanes) || lanes.length < 2) return null;
+  const sirven = lanes.filter((l) => l.valid).length;
+  if (!sirven || sirven === lanes.length) return null;
+  const lado = /left/.test(modo) ? 'left' : /right/.test(modo) ? 'right' : '';
+  return lanes.map((l) => {
+    let flechas = (l.indications || []).map((i) => MISMA_FLECHA[i] || i).filter((i) => FLECHAS.has(i));
+    flechas = [...new Set(flechas.length ? flechas : ['straight'])];
+    let usar = null;
+    if (l.valid) {
+      usar = flechas.includes(modo) ? modo : (lado && flechas.find((f) => f.includes(lado))) || (flechas.includes('straight') ? 'straight' : flechas[0]);
+    }
+    return { flechas, sirve: Boolean(l.valid), usar };
+  });
+}
+
 /**
  * Ruta en carro entre dos puntos [latitud, longitud]. Devuelve
- * { puntos: [[lat, lon]], acumulado: [m], metros, segundos, pasos: [{ texto, voz, via, desde, metros, segundos }] }
+ * { puntos: [[lat, lon]], acumulado: [m], metros, segundos, pasos: [{ texto, voz, via, desde, metros, segundos, carriles }] }
  * (`desde` = metros desde el inicio hasta donde se hace la maniobra) o lanza un error.
  */
 export async function calcularRuta(origen, destino, senal) {
@@ -192,7 +222,7 @@ export async function calcularRuta(origen, destino, senal) {
   let total = 0;
   for (const tramo of datos.routes[0].legs) {
     for (const paso of tramo.steps) {
-      pasos.push({ texto: instruccion(paso), voz: vozDePaso(paso), via: paso.name || '', desde: total, metros: paso.distance, segundos: paso.duration });
+      pasos.push({ texto: instruccion(paso), voz: vozDePaso(paso), via: paso.name || '', desde: total, metros: paso.distance, segundos: paso.duration, carriles: carrilesDePaso(paso) });
       for (const [longitud, latitud] of paso.geometry.coordinates) {
         const punto = [latitud, longitud];
         const ultimo = puntos[puntos.length - 1];
