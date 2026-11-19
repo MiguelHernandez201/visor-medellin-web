@@ -796,35 +796,6 @@ body.en-mapa .contenido {
   color: var(--texto-suave);
 }
 
-.boton-aviso {
-  position: absolute;
-  top: 114px;
-  left: 12px;
-  z-index: 800;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 40px;
-  padding: 4px 14px 4px 10px;
-  border: 1px solid var(--borde);
-  border-radius: 999px;
-  background: rgba(5, 7, 13, 0.88);
-  color: var(--texto-suave);
-  font-size: 0.9rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.boton-aviso svg {
-  width: 20px;
-  height: 20px;
-}
-
-.boton-aviso[aria-pressed="true"] {
-  border-color: var(--amarillo);
-  color: var(--amarillo);
-}
-
 /* Franja que aparece al acercarse a una fotomulta (en cualquier pestaña) */
 .aviso-fotomulta {
   position: sticky;
@@ -894,7 +865,7 @@ body.en-mapa .contenido {
 
 .boton-ruta {
   position: absolute;
-  top: 162px;
+  top: 114px;
   left: 12px;
   z-index: 800;
   display: inline-flex;
@@ -3716,13 +3687,8 @@ body.en-mapa .contenido {
     max-height: calc(100% - 16px);
   }
 
-  .boton-aviso {
-    top: 106px;
-    left: 8px;
-  }
-
   .boton-ruta {
-    top: 152px;
+    top: 106px;
     left: 8px;
   }
 

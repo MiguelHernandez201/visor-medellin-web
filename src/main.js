@@ -338,7 +338,6 @@ app.innerHTML = `
         </div>
         <button class="boton-filtros" type="button" aria-expanded="false" title="Elegir qué se ve en el mapa">${ICONOS.filtros}<span>Filtros</span></button>
         <div class="filtros-mapa" hidden></div>
-        <button class="boton-aviso" type="button" aria-pressed="false" title="Suena al acercarte a una fotomulta (usa el GPS)">${ICONOS.campana}<span>Aviso sonoro</span></button>
         <button class="boton-panel" type="button" aria-expanded="true"></button>
         <button class="boton-ruta" type="button" aria-pressed="false" title="Buscar una ruta en carro">${ICONOS.ruta}<span>Ruta</span></button>
         <button class="boton-icono boton-ubicar" type="button" aria-pressed="false" aria-label="Ver mi carro en el mapa" title="Ver mi carro en el mapa">${ICONOS.ubicar}</button>
@@ -472,7 +471,6 @@ const pieSimmEl = $('.pie-simm');
 const capasEl = $('.capas-lluvia');
 const botonFiltrosEl = $('.boton-filtros');
 const filtrosMapaEl = $('.filtros-mapa');
-const botonAvisoEl = $('.boton-aviso');
 const botonRutaEl = $('.boton-ruta');
 const botonPanelEl = $('.boton-panel');
 const botonUbicarEl = $('.boton-ubicar');
@@ -1106,11 +1104,11 @@ function mostrarPanel(ver) {
 botonPanelEl.addEventListener('click', () => mostrarPanel(!verPanel));
 mostrarPanel(verPanel);
 
-// Aviso sonoro al acercarse a una fotomulta (avisos.js). La franja se ve en todas las pestañas.
+// Aviso sonoro al acercarse a una fotomulta (avisos.js): siempre activo, sin botón. La franja
+// se ve en todas las pestañas.
 const avisos = crearAvisos({ camaras: FOTOMULTAS, alCambiar: pintarAviso });
 
 function pintarAviso({ activo, gps, cerca }) {
-  botonAvisoEl.setAttribute('aria-pressed', String(activo));
   let texto = '';
   let numero = '';
   if (cerca) {
@@ -1127,16 +1125,7 @@ function pintarAviso({ activo, gps, cerca }) {
   avisoFotomultaEl.classList.toggle('sin-camara', !cerca);
   avisoFotomultaEl.querySelector('.fotomulta').textContent = numero;
   avisoFotomultaEl.querySelector('.aviso-fotomulta-texto').textContent = texto;
-  const etiqueta = !activo ? 'Aviso sonoro' : gps === 'pidiendo' ? 'Aviso: buscando GPS…' : gps === 'activo' ? 'Aviso sonoro activo' : 'Aviso: sin GPS';
-  botonAvisoEl.querySelector('span').textContent = etiqueta;
 }
-
-botonAvisoEl.addEventListener('click', () => {
-  const activar = !avisos.activo();
-  guardarPreferencia('avisoFotomultas', activar);
-  avisos.activar(activar);
-  if (activar) avisos.probar(); // suena una vez: así se sabe cómo es y a qué volumen
-});
 
 // ---------------------------------------------------------------------------
 // El carro en el mapa y las rutas (ubicacion.js, rutas.js)
@@ -2303,7 +2292,7 @@ document.addEventListener('visibilitychange', () => {
 
 pintarSeccion();
 if (seccion === 'motor') motor.encenderSiAuto();
-if (leerPreferencia('avisoFotomultas', false)) avisos.activar(true);
+avisos.activar(true);
 tic();
 prepararInstalacion($('.boton-instalar'));
 registrarServiceWorker();
