@@ -5,6 +5,7 @@
 // Aquí va lo que no es audio: la velocidad (GPS o pedales), una caja de cambios automática
 // imaginaria que convierte velocidad y aceleración en revoluciones y carga, y la interfaz.
 import { crearSonido } from './motor-audio.js';
+import { vigilar } from './audio-despierto.js';
 import { ICONOS } from './iconos.js';
 
 // res: resonancias [Hz, Q, ganancia]; marchas: km/h al corte en cada marcha.
@@ -294,17 +295,42 @@ export function crearMotor(el, { leer, guardar }) {
 
   const configurar = () => sonido && sonido.configurar(configuracion());
 
+  async function abrirSonido() {
+    abriendo = abriendo || crearSonido();
+    try {
+      sonido = await abriendo;
+    } finally {
+      abriendo = null;
+    }
+    // apagado, el audio se pausa a propósito: solo se vigila mientras está encendido
+    vigilar(sonido.contexto, { renovar: renovarSonido, activo: () => encendido });
+  }
+
+  /** El audio quedó mudo (iPhone tras volver a la app): se cierra y se abre uno nuevo. */
+  async function renovarSonido() {
+    if (!sonido || abriendo) return;
+    const viejo = sonido;
+    sonido = null;
+    viejo.cerrar().catch(() => {});
+    if (!encendido) return; // se abre de nuevo al encender
+    try {
+      await abrirSonido();
+      sonido.volumen(pref.volumen / 100);
+      configurar();
+      await sonido.reanudar();
+    } catch {
+      // sigue mudo: el próximo toque lo intenta otra vez («Toca la pantalla…»)
+    }
+    pintarControles();
+  }
+
   async function encender() {
     if (encendido) return;
     encendido = true;
     errorAudio = '';
     pintarControles();
     try {
-      if (!sonido) {
-        abriendo = abriendo || crearSonido();
-        sonido = await abriendo;
-        abriendo = null;
-      }
+      if (!sonido) await abrirSonido();
       sonido.volumen(pref.volumen / 100);
       configurar();
       await sonido.reanudar();

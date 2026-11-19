@@ -9,7 +9,7 @@
 // límite, suena un segundo aviso más agudo. La ubicación no sale del navegador.
 
 import { voz } from './voz.js';
-import { despertar, mantenerDespierto } from './audio-despierto.js';
+import { despertar, vigilar } from './audio-despierto.js';
 import { FRASES } from './frases-voz.js';
 
 const RADIO_MIN = 300; // metros
@@ -67,8 +67,16 @@ export function crearAvisos({ camaras, alCambiar }) {
     } catch {
       // sin audioSession no hace falta
     }
-    if (!ctx) ctx = mantenerDespierto(new Contexto());
+    if (!ctx) ctx = vigilar(new Contexto(), { renovar: renovarAudio, activo: () => estado.activo });
     despertar(ctx);
+  }
+
+  /** El audio quedó mudo (iPhone tras volver a la app): se cierra y se abre uno nuevo. */
+  function renovarAudio() {
+    const viejo = ctx;
+    ctx = null;
+    if (viejo) viejo.close().catch(() => {});
+    if (estado.activo) abrirAudio();
   }
 
   /** Pitidos: `notas` = [[Hz, segundos], …], uno tras otro. */

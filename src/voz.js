@@ -6,7 +6,7 @@
 // permiso o el navegador no tiene Web Audio): quien la llama sigue con su plan B (la voz del
 // navegador, pitidos o nada).
 import { crearGrabaciones } from './grabaciones.js';
-import { despertar, mantenerDespierto } from './audio-despierto.js';
+import { despertar, vigilar } from './audio-despierto.js';
 import { FRASES, GRUPOS } from './frases-voz.js';
 
 const PAUSA = 0.06; // segundos entre los trozos de una frase («En doscientos metros,» + «gira…»)
@@ -14,6 +14,7 @@ const PAUSA = 0.06; // segundos entre los trozos de una frase («En doscientos m
 let ctx = null;
 let grabaciones = null;
 let sonando = []; // nodos de la frase actual, para cortarla
+const pedidos = new Set(); // grupos ya pedidos: se vuelven a bajar si el audio se renueva
 
 function contexto() {
   if (ctx) return ctx;
@@ -25,20 +26,28 @@ function contexto() {
   } catch {
     // sin audioSession no hace falta
   }
-  ctx = mantenerDespierto(new Contexto());
+  ctx = vigilar(new Contexto(), { renovar: renovarVoz });
   grabaciones = crearGrabaciones(ctx, Object.keys(FRASES), ctx.destination, 'voces');
-  // el navegador no deja sonar hasta que haya un toque: cualquiera suelta el audio
-  const soltar = () => despertar(ctx);
-  document.addEventListener('pointerdown', soltar);
-  document.addEventListener('keydown', soltar);
-  soltar();
+  despertar(ctx); // si el navegador pide un toque, audio-despierto.js lo suelta con el primero
   return ctx;
+}
+
+/** El audio quedó mudo (iPhone tras volver a la app): se cierra y se abre uno nuevo. */
+function renovarVoz() {
+  const viejo = ctx;
+  ctx = null;
+  grabaciones = null;
+  sonando = [];
+  if (viejo) viejo.close().catch(() => {});
+  if (!contexto()) return;
+  for (const grupo of pedidos) grabaciones.cargar(GRUPOS[grupo] || []);
 }
 
 export const voz = {
   /** Baja las frases de un grupo de GRUPOS (fotomultas, ruta, bromas). Promesa: true si llegaron. */
   cargar(grupo) {
     if (!contexto()) return Promise.resolve(false);
+    pedidos.add(grupo);
     return grabaciones.cargar(GRUPOS[grupo] || []); // cada archivo se baja una sola vez
   },
 
