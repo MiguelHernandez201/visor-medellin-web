@@ -115,6 +115,19 @@ export function crearMapa(contenedor, { vista, alElegir, alMover, alTocar = () =
   actualizarCifras();
   mapa.on('click', (evento) => alTocar([evento.latlng.lat, evento.latlng.lng]));
   mapa.on('dragstart', alArrastrar);
+  // Con el mapa girado, Leaflet movería el mapa torcido respecto al dedo: el desplazamiento se
+  // gira al revés del mapa, así el mapa va con el dedo sin tener que enderezarlo.
+  const arrastre = mapa.dragging && mapa.dragging._draggable;
+  if (arrastre) {
+    arrastre.on('predrag', () => {
+      if (!esGirable || !giro) return;
+      const r = (giro * Math.PI) / 180;
+      const cos = Math.cos(r);
+      const sin = Math.sin(r);
+      const d = arrastre._newPos.subtract(arrastre._startPos);
+      arrastre._newPos = arrastre._startPos.add(L.point(d.x * cos + d.y * sin, -d.x * sin + d.y * cos));
+    });
+  }
   // mientras hay zoom, el carro no se desliza (iría por detrás del mapa)
   mapa.on('zoomstart', () => contenedor.classList.add('en-zoom'));
   mapa.on('zoomend', () => contenedor.classList.remove('en-zoom'));
@@ -414,7 +427,8 @@ export function crearMapa(contenedor, { vista, alElegir, alMover, alTocar = () =
   // esquinas vacías, el contenedor pasa a ser un cuadrado del tamaño de la diagonal de la
   // caja visible, centrado en ella. Los puntos y globos se contragiran en el CSS (--giro).
   // Con el mapa girado Leaflet no sabe convertir un toque en coordenadas, así que el zoom se
-  // hace alrededor del centro y quien arrastre o deba tocar un punto primero lo endereza.
+  // hace alrededor del centro, el arrastre se corrige (ver «predrag» arriba) y quien deba tocar
+  // un punto primero lo endereza.
   const caja = contenedor.parentElement;
   let esGirable = false;
   let giro = 0; // grados acumulados

@@ -764,7 +764,7 @@ function asegurarMapa() {
     alArrastrar: () => {
       if (!siguiendo) return;
       siguiendo = false;
-      giroYa = true; // girado, Leaflet arrastraría torcido: se endereza de una
+      giroLibre = girando; // el mapa se queda con el giro que tenía mientras se explora
       pintarUbicar();
     },
   });
@@ -1144,7 +1144,8 @@ botonAvisoEl.addEventListener('click', () => {
 let siguiendo = false; // el mapa se mueve con el carro
 let rumboArriba = leerPreferencia('rumboArriba', true); // siguiendo al carro, el mapa gira con él
 let girando = false;
-let giroYa = false; // el próximo cambio de giro va sin animación (lo pide un arrastre)
+let giroYa = false; // el próximo cambio de giro va sin animación
+let giroLibre = false; // se movió el mapa girado con el dedo: deja de seguir pero conserva el giro
 let rutaAbierta = false; // el panel muestra la búsqueda de ruta
 let eligiendoDestino = false; // el próximo toque en el mapa es el destino
 let destino = null; // { nombre, detalle, latitud, longitud }
@@ -1204,15 +1205,18 @@ function pintarGiro(posicion = ubicacion.posicion()) {
   if (!mapa) return;
   mapa.girable(rumboArriba && activa);
   const debe = rumboArriba && activa && siguiendo && !eligiendoDestino && Boolean(posicion) && posicion.rumbo != null;
+  // explorando el mapa con el dedo: ni se endereza ni sigue girando con el carro
+  const libre = giroLibre && girando && !siguiendo && rumboArriba && activa && !eligiendoDestino;
   if (debe) {
     // detenido, el rumbo del GPS baila: se conserva el último giro
     if (!girando || posicion.velocidad > 1.5) mapa.girar(posicion.rumbo);
     botonNorteEl.querySelector('.brujula').style.rotate = `${-Math.round(posicion.rumbo)}deg`;
-  } else if (girando || giroYa) {
+  } else if (!libre && (girando || giroYa)) {
     mapa.girar(0, giroYa);
     botonNorteEl.querySelector('.brujula').style.rotate = '0deg';
   }
-  girando = debe;
+  girando = debe || libre;
+  if (!libre) giroLibre = false;
   giroYa = false;
 }
 
@@ -1362,6 +1366,7 @@ async function calcularRuta(recalculo = false) {
     mapa.ruta(ruta.puntos, [destino.latitud, destino.longitud]);
     if (!recalculo) {
       siguiendo = false;
+      giroLibre = false;
       mapa.encuadrar(ruta.puntos);
       pintarUbicar();
     }
@@ -1763,6 +1768,7 @@ panelRutaEl.addEventListener('click', (evento) => {
   else if (accion.dataset.ruta === 'reintentar') calcularRuta();
   else if (accion.dataset.ruta === 'ver') {
     siguiendo = false;
+    giroLibre = false;
     mapa.encuadrar(ruta.puntos);
     pintarUbicar();
     if (matchMedia('(max-width: 720px)').matches) abrirRuta(false);
