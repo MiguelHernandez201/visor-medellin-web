@@ -7,6 +7,7 @@ import { crearEfectos } from './efectos.js';
 import { crearBromas } from './bromas.js';
 import { crearSpotify } from './spotify.js';
 import { crearFutbol } from './futbol.js';
+import { despertar, mantenerDespierto } from './audio-despierto.js';
 
 // Emisoras en vivo. Las de deportes narran los partidos de la Liga (Nacional, Medellín…).
 // Radio Nacional solo transmite en HLS: aparece solo en Safari (Mac, iPhone), que lo reproduce.
@@ -284,8 +285,8 @@ export function crearUtilidades(el, { leer, guardar, alTemporizador = () => {}, 
     } catch {
       // sin audioSession no hace falta
     }
-    if (!ctx) ctx = new Contexto({ latencyHint: 'interactive' });
-    if (ctx.state !== 'running') ctx.resume().catch(() => {});
+    if (!ctx) ctx = mantenerDespierto(new Contexto({ latencyHint: 'interactive' }));
+    despertar(ctx);
     return ctx;
   }
   const losPads = () => {
@@ -1129,6 +1130,10 @@ export function crearUtilidades(el, { leer, guardar, alTemporizador = () => {}, 
   requestAnimationFrame(cuadroCrono);
 
   document.addEventListener('visibilitychange', cuidarPantalla);
+  // si el sistema pausó la radio mientras la página estaba minimizada, sigue al volver
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && radioSonando && radio && radio.paused) radio.play().catch(() => {});
+  });
   // tras recargar con un temporizador andando, el sonido queda bloqueado hasta el primer toque
   document.addEventListener('pointerdown', () => {
     if (pref.temporizador || terminado) audio();

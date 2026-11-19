@@ -9,6 +9,7 @@
 // límite, suena un segundo aviso más agudo. La ubicación no sale del navegador.
 
 import { voz } from './voz.js';
+import { despertar, mantenerDespierto } from './audio-despierto.js';
 import { FRASES } from './frases-voz.js';
 
 const RADIO_MIN = 300; // metros
@@ -66,13 +67,18 @@ export function crearAvisos({ camaras, alCambiar }) {
     } catch {
       // sin audioSession no hace falta
     }
-    if (!ctx) ctx = new Contexto();
-    if (ctx.state !== 'running') ctx.resume().catch(() => {});
+    if (!ctx) ctx = mantenerDespierto(new Contexto());
+    despertar(ctx);
   }
 
   /** Pitidos: `notas` = [[Hz, segundos], …], uno tras otro. */
   function pitar(notas) {
-    if (!ctx || ctx.state !== 'running') return;
+    if (ctx && ctx.state !== 'running') {
+      // dormido (la página estuvo minimizada): se despierta y suena apenas arranque
+      if (ctx.state !== 'closed') ctx.resume().then(() => pitar(notas), () => {});
+      return;
+    }
+    if (!ctx) return;
     let t = ctx.currentTime + 0.03;
     for (const [hz, dura] of notas) {
       const oscilador = ctx.createOscillator();
