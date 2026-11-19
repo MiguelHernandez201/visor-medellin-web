@@ -316,6 +316,7 @@ export async function crearSonido() {
   nodo.connect(salida);
 
   return {
+    contexto: ctx,
     configurar: (cfg) => enviar({ cfg }),
     fijar: (est) => enviar({ est }),
     volumen: (v) => salida.gain.setTargetAtTime(v, ctx.currentTime, 0.03),

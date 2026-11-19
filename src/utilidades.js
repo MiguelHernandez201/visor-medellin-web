@@ -7,7 +7,7 @@ import { crearEfectos } from './efectos.js';
 import { crearBromas } from './bromas.js';
 import { crearSpotify } from './spotify.js';
 import { crearFutbol } from './futbol.js';
-import { despertar, mantenerDespierto } from './audio-despierto.js';
+import { despertar, vigilar } from './audio-despierto.js';
 
 // Emisoras en vivo. Las de deportes narran los partidos de la Liga (Nacional, Medellín…).
 // Radio Nacional solo transmite en HLS: aparece solo en Safari (Mac, iPhone), que lo reproduce.
@@ -285,9 +285,26 @@ export function crearUtilidades(el, { leer, guardar, alTemporizador = () => {}, 
     } catch {
       // sin audioSession no hace falta
     }
-    if (!ctx) ctx = mantenerDespierto(new Contexto({ latencyHint: 'interactive' }));
+    if (!ctx) ctx = vigilar(new Contexto({ latencyHint: 'interactive' }), { renovar: renovarAudio });
     despertar(ctx);
     return ctx;
+  }
+
+  /**
+   * El audio quedó mudo (iPhone tras volver a la app): se cierra y se abre uno nuevo. Los pads,
+   * los efectos y el tono de vigilia se rehacen con él (la base del DJ, si sonaba, se detiene).
+   */
+  function renovarAudio() {
+    const viejo = ctx;
+    ctx = null;
+    pads = null;
+    efectos = null;
+    vigilia = null;
+    if (viejo) viejo.close().catch(() => {});
+    audio();
+    const seguian = [...motivos];
+    motivos.clear();
+    for (const motivo of seguian) despierto(motivo, true);
   }
   const losPads = () => {
     const c = audio();
