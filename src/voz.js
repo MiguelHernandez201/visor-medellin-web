@@ -6,6 +6,7 @@
 // permiso o el navegador no tiene Web Audio): quien la llama sigue con su plan B (la voz del
 // navegador, pitidos o nada).
 import { crearGrabaciones } from './grabaciones.js';
+import { despertar, mantenerDespierto } from './audio-despierto.js';
 import { FRASES, GRUPOS } from './frases-voz.js';
 
 const PAUSA = 0.06; // segundos entre los trozos de una frase («En doscientos metros,» + «gira…»)
@@ -24,12 +25,10 @@ function contexto() {
   } catch {
     // sin audioSession no hace falta
   }
-  ctx = new Contexto();
+  ctx = mantenerDespierto(new Contexto());
   grabaciones = crearGrabaciones(ctx, Object.keys(FRASES), ctx.destination, 'voces');
   // el navegador no deja sonar hasta que haya un toque: cualquiera suelta el audio
-  const soltar = () => {
-    if (ctx.state !== 'running') ctx.resume().catch(() => {});
-  };
+  const soltar = () => despertar(ctx);
   document.addEventListener('pointerdown', soltar);
   document.addEventListener('keydown', soltar);
   soltar();
@@ -53,6 +52,7 @@ export const voz = {
    * estuviera diciendo. Devuelve false (sin decir nada) si falta algún trozo o no hay audio.
    */
   decir(ids, { antes = 0 } = {}) {
+    if (ctx && ctx.state !== 'running') despertar(ctx); // dormido tras minimizar: para el próximo
     if (!ctx || ctx.state !== 'running' || !this.tiene(ids)) return false;
     this.callar();
     let t = ctx.currentTime + 0.02 + antes;
